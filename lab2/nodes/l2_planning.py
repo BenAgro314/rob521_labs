@@ -145,13 +145,20 @@ class PathPlanner:
         p_m = self.t_mw @ p_w
         x_idx = (p_m[:, 0] / res).astype(int)
         y_idx = ((h - p_m[:, 1]) / res).astype(int)
-        return np.concatenate((x_idx, y_idx), axis = -1).transpose(1, 0) # (N, 2)
+        return np.concatenate((x_idx, y_idx), axis = -1) # (N, 2)
 
     def points_to_robot_circle(self, points):
         #Convert a series of [x,y] points to robot map footprints for collision detection
         #Hint: The disk function is included to help you with this function
         print("TO DO: Implement a method to get the pixel locations of the robot path")
-        return [], []
+        inds = self.point_to_cell(points) # px locations (N, 2)
+        res = self.map_settings_dict["resolution"]
+        radius = self.robot_radius / res # radius in px
+        footprints = [] # one for each point
+        for ind in inds:
+            rr, cc = disk((ind[0], ind[1]), radius, shape = self.map_shape)
+            footprints.append(np.stack((rr,cc), axis = -1))
+        return footprints # [(num_pts_per_circle, 2)] x num_pts
     #Note: If you have correctly completed all previous functions, then you should be able to create a working RRT function
 
     #RRT* specific functions
