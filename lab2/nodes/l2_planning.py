@@ -126,11 +126,26 @@ class PathPlanner:
         print("TO DO: Implement a control scheme to drive you towards the sampled point")
         return 0, 0
     
-    def trajectory_rollout(self, vel, rot_vel):
+    def trajectory_rollout(self, vel, rot_vel, x_y_theta):
         # Given your chosen velocities determine the trajectory of the robot for your given timestep
         # The returned trajectory should be a series of points to check for collisions
-        print("TO DO: Implement a way to rollout the controls chosen")
-        return np.zeros((3, self.num_substeps))
+        # x_y_theta: (x, y, theta), (3, 1)
+        # vel.shape: float
+        # rot_vel: float
+        t = np.linspace(0, self.timestep, self.num_substeps)
+        x0 = x_y_theta[0]
+        y0 = x_y_theta[1]
+        theta0 = x_y_theta[2]
+        if rot_vel == 0:
+            x = vel * t * np.cos(theta0) + x0
+            y = vel * t * np.sin(theta0) + y0
+            theta = np.ones_like(t) * theta0
+        else:
+            theta = rot_vel * t + theta0
+            x = (vel / rot_vel)  * (np.sin(theta) - np.sin(theta0)) + x0
+            y = - (vel / rot_vel)  * (np.cos(theta) - np.cos(theta0)) + y0
+
+        return np.stack((x, y, theta), axis = -1) # (self.num_substeps, 3)
     
     def point_to_cell(self, p_w):
         #Convert a series of [x,y] points in the map to the indices for the corresponding cell in the occupancy map
@@ -140,7 +155,7 @@ class PathPlanner:
         res = self.map_settings_dict["resolution"]
         h = self.map_shape[1] * res
         assert p_w.shape == (2, num_pts)
-        p_w = p_w.reshape(num_pts, 2) # (N, 2)
+        p_w = p_w.T
         p_w = np.concatenate((p_w, np.zeros_like(p_w[:, -1:]), np.ones_like(p_w[:, -1:])), axis = -1)[:, :, None] # (N, 4, 1)
         p_m = self.t_mw @ p_w
         x_idx = (p_m[:, 0] / res).astype(int)
