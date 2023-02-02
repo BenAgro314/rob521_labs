@@ -35,6 +35,25 @@ class Node:
         self.children_ids = [] # The children node ids of this node
         return
 
+def define_circle(p1, p2, p3):
+    """
+    Returns the center and radius of the circle passing the given 3 points.
+    In case the 3 points form a line, returns (None, infinity).
+    """
+    temp = p2[0] * p2[0] + p2[1] * p2[1]
+    bc = (p1[0] * p1[0] + p1[1] * p1[1] - temp) / 2
+    cd = (temp - p3[0] * p3[0] - p3[1] * p3[1]) / 2
+    det = (p1[0] - p2[0]) * (p2[1] - p3[1]) - (p2[0] - p3[0]) * (p1[1] - p2[1])
+    
+    if abs(det) < 1.0e-6:
+        return (None, np.inf)
+    
+    # Center of circle
+    cx = (bc*(p2[1] - p3[1]) - cd*(p1[1] - p2[1])) / det
+    cy = ((p1[0] - p2[0]) * cd - (p2[0] - p3[0]) * bc) / det
+    
+    radius = np.sqrt((cx - p1[0])**2 + (cy - p1[1])**2)
+    return np.array([cx, cy]), radius
 
 #Path Planner 
 class PathPlanner:
@@ -70,6 +89,8 @@ class PathPlanner:
         #Planning storage
         self.start_point = np.array([[0], [0], [0]])
         self.nodes = [Node(self.start_point, -1, 0)] # assuming robot starts at origin
+        self.min_pt = self.start_point
+        self.max_pt = self.start_point
         inds = self.point_to_cell(self.nodes[0].point[:-1])[0]
         self.sampled_points[inds[1], inds[0]] = 1
 
@@ -134,15 +155,21 @@ class PathPlanner:
             #y = (res * ind[0]) + self.map_settings_dict["origin"][1]
             #x = (res * ind[1]) + self.map_settings_dict["origin"][0]
             #point = np.array([[xy[0]], [xy[1]], [theta]])
-            r = np.abs(np.linalg.norm(self.goal_point - self.start_point[:-1]) * np.random.randn())
-            dphi = np.random.rand() * 2 * np.pi  - np.pi # [pi, -pi]
-            dx = r * np.cos(dphi)
-            dy = r * np.sin(dphi)
-            point = np.array([[self.goal_point[0, 0] +dx], [self.goal_point[1, 0] + dy], [theta]])
+            #r = np.abs(np.linalg.norm(self.goal_point - self.start_point[:-1]) * np.random.randn())
+            #dphi = np.random.rand() * 2 * np.pi  - np.pi # [pi, -pi]
+            #dx = r * np.cos(dphi)
+            #dy = r * np.sin(dphi)
+            #point = np.array([[self.goal_point[0, 0] +dx], [self.goal_point[1, 0] + dy], [theta]])
+
+            max_pt = self.max_pt + 3 * self.vel_max
+            min_pt = self.min_pt - 3 * self.vel_max
+
+            point = np.random.rand(3, 1) * (max_pt - min_pt) + min_pt
+            point[-1] = theta
         else:
             theta = np.random.rand() * 2 * np.pi  - np.pi # [pi, -pi]
-            dx = self.stopping_dist * np.random.randn()
-            dy = self.stopping_dist * np.random.randn()
+            dx = 4 * self.stopping_dist * np.random.randn()
+            dy = 4 * self.stopping_dist * np.random.randn()
             point = np.array([[self.goal_point[0, 0] +dx], [self.goal_point[1, 0] + dy], [theta]])
         return point 
     
@@ -188,20 +215,20 @@ class PathPlanner:
         # point_i = [x_i; y_i; theta_i], shape (3, 1)
         # point_s = [x_s; y_s; theta_s], shape (3, 1)
 
-        # grid search for best over possible
-        # TODO: make this better
+        # -------------------------------- grid search ----------------------------------------
 
-        vel_range = np.linspace(-self.vel_max, self.vel_max, 5)
-        omega_range = np.linspace(-self.rot_vel_max, self.rot_vel_max, 5)
-        vo = np.dstack(np.meshgrid(vel_range, omega_range)).reshape(-1, 2)
-        pts = self.trajectory_rollout(vo[:, 0:1], vo[:, 1:2], point_i)[:, -1:, :] # (N, 1, 3)
-        point_s = point_s[None, :, 0]
-        pts = pts[:, 0, :]
-        #dtheta = np.arctan2(np.sin(point_s[:, -1]),np.cos(pts[:, -1]))
-        best_input_ind = np.argmin(np.linalg.norm(point_s[:, :-1] - pts[:, :-1], axis = -1, ord = 1), axis = 0)
-        v_omega = vo[best_input_ind]
-        return v_omega[0:1], v_omega[1:2] # (1, ), (1,)
+        # vel_range = np.linspace(-self.vel_max, self.vel_max, 5)
+        # omega_range = np.linspace(-self.rot_vel_max, self.rot_vel_max, 5)
+        # vo = np.dstack(np.meshgrid(vel_range, omega_range)).reshape(-1, 2)
+        # pts = self.trajectory_rollout(vo[:, 0:1], vo[:, 1:2], point_i)[:, -1:, :] # (N, 1, 3)
+        # point_s = point_s[None, :, 0]
+        # pts = pts[:, 0, :]
+        # #dtheta = np.arctan2(np.sin(point_s[:, -1]),np.cos(pts[:, -1]))
+        # best_input_ind = np.argmin(np.linalg.norm(point_s[:, :-1] - pts[:, :-1], axis = -1, ord = 1), axis = 0)
+        # v_omega = vo[best_input_ind]
+        # return v_omega[0:1], v_omega[1:2] # (1, ), (1,)
 
+        # ------------------------------- analytic solution with theta ----------------------------
         #dtheta = np.arctan2(np.sin(point_s[-1]), np.cos(point_i[-1]))
         #dx = point_s[0] - point_i[0]
         #omega = np.clip(dtheta / self.timestep, -self.rot_vel_max, self.rot_vel_max)
@@ -215,8 +242,70 @@ class PathPlanner:
         #        v = dx * omega / ds
         #    else:
         #        v = dx * omega / dc
-
         #return np.clip(v, -self.vel_max, self.vel_max), omega # (1,), (1,) numpy arrays
+
+        # ------------------------------- analytic solution without theta ----------------------------
+
+        t_wv = transformations.euler_matrix(0, 0, point_i[2])
+        t_wv[0, -1] = point_i[0]
+        t_wv[1, -1] = point_i[1]
+
+        t_vw = np.linalg.inv(t_wv)
+        ps_w = np.concatenate((point_s[:2], np.zeros_like(point_s[-1:]), np.ones_like(point_s[-1:])), axis = 0) # (4, 1)
+        ps_v = (t_vw @ ps_w)
+        pmirror_v = ps_v.copy() 
+        pmirror_v[0] *= -1
+        pmirror_w = t_wv @ pmirror_v
+
+        center_w, radius = define_circle(point_i[:2], point_s[:2], pmirror_w[:2]) 
+        if not np.isfinite(radius): # straight ahead or behind
+            #assert ps_v[1]  == 0, "y coord in vehicle frame must be 0"
+            v = np.clip(ps_v[0], -self.vel_max, self.vel_max)
+            omega = np.zeros((1,))
+        else:
+            center_w = np.concatenate((center_w, np.zeros_like(center_w[-1:]), np.ones_like(center_w[-1:])), axis = 0) # (4, 1)
+            center_v = t_vw @ center_w
+
+            max_r = self.vel_max / self.rot_vel_max
+
+            if center_v[1] < 0: # right turn
+                if center_v[0] > 0: # forwards
+                    if radius > max_r:
+                        v = self.vel_max
+                        omega = -v / radius
+                    else:
+                        omega = - self.rot_vel_max
+                        v = omega * radius
+                else: # backwards
+                    if radius > max_r:
+                        v = -self.vel_max
+                        omega = self.vel_max / radius
+                    else:
+                        omega = self.rot_vel_max
+                        v = - omega * radius
+            else: # left turn
+                if center_v[0] > 0: # forwards
+                    if radius > max_r:
+                        v = self.vel_max
+                        omega = v / radius
+                    else:
+                        omega = self.rot_vel_max
+                        v = omega * radius
+                else: # backwards
+                    if radius > max_r:
+                        v = -self.vel_max
+                        omega = v / radius
+                    else:
+                        omega = -self.rot_vel_max
+                        v = omega * radius
+
+
+            v = np.array([v]).reshape((1,))
+            omega = np.array([omega]).reshape((1,))
+
+        return v, omega
+   
+
     
     def trajectory_rollout(self, vel, rot_vel, x_y_theta):
         # Given your chosen velocities determine the trajectory of the robot for your given timestep
@@ -363,6 +452,11 @@ class PathPlanner:
             #print(f"Arrived to point: {arrived_to_pt}")
             self.window.add_point(arrived_to_pt[:-1, 0].copy())
             assert not self.is_colliding(arrived_to_pt[:-1])
+
+            self.min_pt = np.minimum(self.min_pt, arrived_to_pt)
+            self.max_pt = np.maximum(self.max_pt, arrived_to_pt)
+            #print(self.min_pt)
+            #print(self.max_pt)
 
             self.nodes.append(Node(point = arrived_to_pt, parent_id = closest_node_id, cost = 0)) # no cost for RRT
 
