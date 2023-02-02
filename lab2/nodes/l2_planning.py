@@ -8,6 +8,7 @@ import time
 from nodes.utils import get_maps_dir
 import pygame_utils
 import matplotlib.image as mpimg
+import math
 from skimage.draw import disk
 from functools import cached_property
 from scipy.linalg import block_diag
@@ -115,37 +116,50 @@ class PathPlanner:
         #node_i is a 3 by 1 vector [x;y;theta] this can be used to construct the SE(2) matrix T_{OI} in course notation
         #point_s is the sampled point vector [x; y]
         print("TO DO: Implment a method to simulate a trajectory given a sampled point")
-        vel, rot_vel = self.robot_controller(node_i, point_s)
-
-        robot_traj = self.trajectory_rollout(vel, rot_vel)
+        vel, rot_vel = self.robot_controller(node_i.point, point_s)
+        vel = np.array([vel])[None, :]
+        rot_vel = np.array([rot_vel])[None, :]
+        robot_traj = self.trajectory_rollout(vel, rot_vel, node_i.point)
         return robot_traj
     
-    def robot_controller(self, node_i, point_s):
+    def robot_controller(self, point_i, point_s):
         #This controller determines the velocities that will nominally move the robot from node i to node s
         #Max velocities should be enforced
-        print("TO DO: Implement a control scheme to drive you towards the sampled point")
-        return 0, 0
+        # point_i = [x_i; y_i; theta_i]
+        # point_s = [x_s; y_s; theta_s]
+
+        # grid search for best over possible
+        vel_range = np.linspace(-self.vel_max, self.vel_max, 51)
+        omega_range = np.linspace(-self.rot_vel_max, self.rot_vel_max, 51)
+        vo = np.dstack(np.meshgrid(vel_range, omega_range)).reshape(-1, 2)
+        pts = self.trajectory_rollout(vo[:, 0:1], vo[:, 1:2], point_i, t = np.array([self.timestep])[None, :]) # (N, 1, 3)
+        point_s = point_s[None, :, 0]
+        pts = pts[:, 0, :]
+        dtheta = np.arctan2(np.sin(point_s[:, -1]),np.cos(pts[:, -1]))
+        best_input_ind = np.argmin(np.linalg.norm(point_s[:, :-1] - pts[:, :-1], axis = -1, ord = 1) + np.abs(dtheta), axis = 0)
+        v_omega = vo[best_input_ind]
+        return v_omega[0], v_omega[1]
     
-    def trajectory_rollout(self, vel, rot_vel, x_y_theta):
+    def trajectory_rollout(self, vel, rot_vel, x_y_theta, t = None):
         # Given your chosen velocities determine the trajectory of the robot for your given timestep
         # The returned trajectory should be a series of points to check for collisions
         # x_y_theta: (x, y, theta), (3, 1)
-        # vel.shape: float
-        # rot_vel: float
-        t = np.linspace(0, self.timestep, self.num_substeps)
-        x0 = x_y_theta[0]
-        y0 = x_y_theta[1]
-        theta0 = x_y_theta[2]
-        if rot_vel == 0:
-            x = vel * t * np.cos(theta0) + x0
-            y = vel * t * np.sin(theta0) + y0
-            theta = np.ones_like(t) * theta0
-        else:
-            theta = rot_vel * t + theta0
-            x = (vel / rot_vel)  * (np.sin(theta) - np.sin(theta0)) + x0
-            y = - (vel / rot_vel)  * (np.cos(theta) - np.cos(theta0)) + y0
+        # vel.shape: (N, 1)
+        # rot_vel: (N, 1)
+        if t is None:
+            t = np.linspace(0, self.timestep, self.num_substeps)[None, :] # (1, num_substeps)
+        x0 = x_y_theta[0:1] # (N, 1)
+        y0 = x_y_theta[1:2] # (N, 1)
+        theta0 = x_y_theta[2:3] # (N, 1)
 
-        return np.stack((x, y, theta), axis = -1) # (self.num_substeps, 3)
+        x = np.zeros((rot_vel.shape[0], t.shape[1])) # (N, num_substeps)
+        y = np.zeros((rot_vel.shape[0], t.shape[1]))
+
+        x = np.where(rot_vel == 0, vel * t * np.cos(theta0) + x0, (vel / rot_vel)  * (np.sin(rot_vel * t + theta0) - np.sin(theta0)) + x0)
+        y = np.where(rot_vel == 0, vel * t * np.sin(theta0) + y0, -(vel / rot_vel)  * (np.cos(rot_vel * t + theta0) - np.cos(theta0)) + y0)
+        theta = np.where(rot_vel == 0, theta0 * np.ones_like(rot_vel * t), rot_vel * t + theta0)
+
+        return np.stack((x, y, theta), axis = -1) # (N, self.num_substeps, 3)
     
     def point_to_cell(self, p_w):
         #Convert a series of [x,y] points in the map to the indices for the corresponding cell in the occupancy map
