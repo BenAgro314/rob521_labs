@@ -132,24 +132,23 @@ class PathPlanner:
         sample_goal = np.random.rand() < 0.05
 
         if not sample_goal:
-            while True:
-                new_bounds = np.array([[-3.5, 43.5],[-49.25, 10.5]])
-                #new_bounds = np.copy(self.bounds)
-                x = np.random.rand() * (new_bounds[0, 1] - new_bounds[0, 0])  + new_bounds[0, 0] 
-                y = np.random.rand() * (new_bounds[1, 1] - new_bounds[1, 0])  + new_bounds[1, 0] 
-                theta = np.random.rand() * 2 * np.pi  - np.pi # [pi, -pi]
-                point = np.array([[x], [y], [theta]])
+            new_bounds = np.array([[-3.5, 43.5],[-49.25, 10.5]])
+            #new_bounds = np.copy(self.bounds)
+            x = np.random.rand() * (new_bounds[0, 1] - new_bounds[0, 0])  + new_bounds[0, 0] 
+            y = np.random.rand() * (new_bounds[1, 1] - new_bounds[1, 0])  + new_bounds[1, 0] 
+            theta = np.random.rand() * 2 * np.pi  - np.pi # [pi, -pi]
+            point = np.array([[x], [y], [theta]])
 
-                #other_pt = point + np.random.randn(3, 1)
-                #other_pt[-1] = theta
+            #other_pt = point + np.random.randn(3, 1)
+            #other_pt[-1] = theta
 
-                #col1 = self.is_colliding(point[:2])
-                #col2 = self.is_colliding(other_pt[:2])
+            #col1 = self.is_colliding(point[:2])
+            #col2 = self.is_colliding(other_pt[:2])
 
-                #if not col1 and col2:
-                #    return point
-                #elif not col2 and col1:
-                #    return other_pt
+            #if not col1 and col2:
+            #    return point
+            #elif not col2 and col1:
+            #    return other_pt
         else:
             theta = np.random.rand() * 2 * np.pi  - np.pi # [pi, -pi]
             dx = 4 * self.stopping_dist * np.random.randn()
