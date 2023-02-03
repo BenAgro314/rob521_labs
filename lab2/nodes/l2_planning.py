@@ -83,7 +83,7 @@ class PathPlanner:
         self.stopping_dist = stopping_dist #m
 
         #Trajectory Simulation Parameters
-        self.timestep = 2.0 #s
+        self.timestep = 5.0 #s
         self.num_substeps = 10
 
         #Planning storage
@@ -140,16 +140,16 @@ class PathPlanner:
                 theta = np.random.rand() * 2 * np.pi  - np.pi # [pi, -pi]
                 point = np.array([[x], [y], [theta]])
 
-                other_pt = point + np.random.randn(3, 1)
-                other_pt[-1] = theta
+                #other_pt = point + np.random.randn(3, 1)
+                #other_pt[-1] = theta
 
-                col1 = self.is_colliding(point[:2])
-                col2 = self.is_colliding(other_pt[:2])
+                #col1 = self.is_colliding(point[:2])
+                #col2 = self.is_colliding(other_pt[:2])
 
-                if not col1 and col2:
-                    return point
-                elif not col2 and col1:
-                    return other_pt
+                #if not col1 and col2:
+                #    return point
+                #elif not col2 and col1:
+                #    return other_pt
         else:
             theta = np.random.rand() * 2 * np.pi  - np.pi # [pi, -pi]
             dx = 4 * self.stopping_dist * np.random.randn()
