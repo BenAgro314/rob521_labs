@@ -613,8 +613,11 @@ def main():
 
     #RRT precursor
     path_planner = PathPlanner(map_filename, map_setings_filename, goal_point, stopping_dist)
-    nodes = path_planner.rrt_star_planning()
-    #nodes = path_planner.rrt_planning()
+    method = "rrt_star"
+    if method == "rrt_star":
+        nodes = path_planner.rrt_star_planning()
+    else:
+        nodes = path_planner.rrt_planning()
     print("done")
     path = path_planner.recover_path()
 
@@ -626,10 +629,10 @@ def main():
     for node in path[1:]:
         path_planner.window.add_line(last_node[:2, 0].copy(), node[:2, 0].copy(), width = 3, color = (0, 0, 255))
         last_node = node
-    input()
+    input("Press Enter to Save")
 
     #Leftover test functions
-    np.save("shortest_path.npy", node_path_metric)
+    np.save(f"shortest_path_{method}.npy", node_path_metric)
 
 
 if __name__ == '__main__':
