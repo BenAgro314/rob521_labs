@@ -6,7 +6,8 @@ import yaml
 import os
 import pygame
 import time
-from nodes.utils import get_maps_dir
+#from nodes.utils import get_maps_dir //Ben's Config
+from utils import get_maps_dir  #Jerry's Config
 import pygame_utils
 import matplotlib.image as mpimg
 import math
@@ -468,6 +469,7 @@ class PathPlanner:
             print(i)
             point = self.sample_map_space()
             self.window.add_point(point[:-1, 0].copy(), color = (255, 0, 0))
+            self.window.check_for_close()
 
             #Get the closest point
             closest_node_id = self.closest_node(point)[0]
@@ -512,7 +514,8 @@ class PathPlanner:
             #Sample
             point = self.sample_map_space()
             self.window.add_point(point[:-1, 0].copy(), color = (255, 0, 0))
-
+            self.window.check_for_close()
+            
             #Closest Node
             closest_node_id = self.closest_node(point)[0]
 
