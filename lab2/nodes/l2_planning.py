@@ -397,13 +397,13 @@ class PathPlanner:
         #p_w is a 2 by N matrix of points of interest of points in the world coords
         num_pts = p_w.shape[-1] 
         res = self.map_settings_dict["resolution"]
-        h = self.map_shape[1] * res
         assert p_w.shape == (2, num_pts)
         p_w = p_w.T
         p_w = np.concatenate((p_w, np.zeros_like(p_w[:, -1:]), np.ones_like(p_w[:, -1:])), axis = -1)[:, :, None] # (N, 4, 1)
         p_m = self.t_mw @ p_w
-        x_idx = (p_m[:, 0] / res).astype(int)
-        y_idx = ((h - p_m[:, 1]) / res).astype(int)
+        p_m /= res
+        x_idx = p_m[:, 0].astype(int)
+        y_idx = (self.map_shape[1] - p_m[:, 1]).astype(int) # Note that image coordinate y-axis points down
         return np.concatenate((x_idx, y_idx), axis = -1) # (N, 2)
 
     def points_to_robot_circle(self, points):
@@ -414,7 +414,30 @@ class PathPlanner:
         res = self.map_settings_dict["resolution"]
         radius = self.robot_radius / res # radius in px
         footprints = [] # one for each point
-        # TODO: how to batch?
+
+        N = inds.shape[0]
+        indexings = np.arange(np.floor(-radius), np.ceil(radius),dtype=np.int64)
+
+        x_indexings, y_indexings= np.meshgrid(indexings,indexings)
+        x_indexings = np.tile(x_indexings.ravel(order='F'),(N,1)) # (N,len_indexings^2)
+        y_indexings = np.tile(y_indexings.ravel(order='F'),(N,1))
+        distances = np.sqrt(x_indexings**2 + y_indexings**2)
+
+        x_circlePts = np.tile(inds[:,0],(x_indexings.shape[1],1)).T + x_indexings #(N,len_indexings^2)
+        y_circlePts = np.tile(inds[:,1],(y_indexings.shape[1],1)).T  + y_indexings #(N,len_indexings^2)
+
+        x_circlePts = x_circlePts[distances < radius].reshape((N,-1))
+        x_circlePts[x_circlePts >= self.occupancy_map.shape[0]] = self.occupancy_map.shape[0] - 1
+        x_circlePts[x_circlePts<0]=0
+
+        y_circlePts = y_circlePts[distances < radius].reshape((N,-1))
+        y_circlePts[y_circlePts >= self.occupancy_map.shape[1]] = self.occupancy_map.shape[1] - 1
+        y_circlePts[y_circlePts<0]=0
+        
+        circlePts = np.stack((x_circlePts,y_circlePts),axis=-1)
+
+        """
+        # Unbatched
         for ind in inds:
             rr, cc = disk((ind[0], ind[1]), radius) #, shape = self.map_shape)
             rr[rr >= self.occupancy_map.shape[0]] = self.occupancy_map.shape[0] - 1
@@ -422,7 +445,13 @@ class PathPlanner:
             rr[rr < 0] = 0
             cc[cc < 0] = 0
             footprints.append(np.stack((rr,cc), axis = -1))
-        return np.stack(footprints, axis = 0) # (num_pts, num_pts_per_circle, 2)
+
+        circle=np.stack(footprints, axis = 0)
+        print(np.sum(circlePts-circle))
+        exit()
+        """
+
+        return circlePts # (num_pts, num_pts_per_circle, 2)
     #Note: If you have correctly completed all previous functions, then you should be able to create a working RRT function
 
     #RRT* specific functions
@@ -515,7 +544,7 @@ class PathPlanner:
             point = self.sample_map_space()
             self.window.add_point(point[:-1, 0].copy(), color = (255, 0, 0))
             self.window.check_for_close()
-            
+
             #Closest Node
             closest_node_id = self.closest_node(point)[0]
 
