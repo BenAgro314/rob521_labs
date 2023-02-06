@@ -17,6 +17,8 @@ from scipy.linalg import block_diag
 from tf import transformations
 import scipy
 
+np.random.seed(11) #11 Works well for rtt*
+
 #Map Handling Functions
 def load_map(filename):
     im = mpimg.imread(os.path.join(get_maps_dir(), filename))
@@ -418,13 +420,14 @@ class PathPlanner:
         N = inds.shape[0]
         indexings = np.arange(np.floor(-radius), np.ceil(radius),dtype=np.int64)
 
+        # Creates a addition map that adds onto center point to produce points in circle
         x_indexings, y_indexings= np.meshgrid(indexings,indexings)
         x_indexings = np.tile(x_indexings.ravel(order='F'),(N,1)) # (N,len_indexings^2)
-        y_indexings = np.tile(y_indexings.ravel(order='F'),(N,1))
-        distances = np.sqrt(x_indexings**2 + y_indexings**2)
+        y_indexings = np.tile(y_indexings.ravel(order='F'),(N,1)) # (N,len_indexings^2)
+        distances = np.sqrt(x_indexings**2 + y_indexings**2) # (N,len_indexings^2)
 
-        x_circlePts = np.tile(inds[:,0],(x_indexings.shape[1],1)).T + x_indexings #(N,len_indexings^2)
-        y_circlePts = np.tile(inds[:,1],(y_indexings.shape[1],1)).T  + y_indexings #(N,len_indexings^2)
+        x_circlePts = np.tile(inds[:,0],(x_indexings.shape[1],1)).T + x_indexings # (N,len_indexings^2)
+        y_circlePts = np.tile(inds[:,1],(y_indexings.shape[1],1)).T  + y_indexings # (N,len_indexings^2)
 
         x_circlePts = x_circlePts[distances < radius].reshape((N,-1))
         x_circlePts[x_circlePts >= self.occupancy_map.shape[0]] = self.occupancy_map.shape[0] - 1
@@ -434,7 +437,7 @@ class PathPlanner:
         y_circlePts[y_circlePts >= self.occupancy_map.shape[1]] = self.occupancy_map.shape[1] - 1
         y_circlePts[y_circlePts<0]=0
         
-        circlePts = np.stack((x_circlePts,y_circlePts),axis=-1)
+        circlePts = np.stack((x_circlePts,y_circlePts),axis=-1) # (num_pts, num_pts_per_circle, 2)
 
         """
         # Unbatched
