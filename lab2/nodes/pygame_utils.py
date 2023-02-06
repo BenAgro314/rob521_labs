@@ -1,8 +1,9 @@
 import numpy as np
 import os
 import pygame
-
-from nodes.utils import get_maps_dir
+import sys
+#from nodes.utils import get_maps_dir //Ben's Config
+from utils import get_maps_dir  #Jerry's Config
 # from pygame.locals import *
 
 COLORS = dict(
@@ -86,5 +87,6 @@ class PygameWindow:
 
     def check_for_close(self):
         for e in pygame.event.get():
-            if e.type == QUIT or (e.type == KEYUP and e.key == K_ESCAPE):
+            if e.type == pygame.QUIT or (e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE) or (e.type == pygame.KEYDOWN and e.key == pygame.K_q):
+                pygame.quit()
                 sys.exit("Closing planner.")
