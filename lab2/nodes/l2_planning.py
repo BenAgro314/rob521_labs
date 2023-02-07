@@ -86,7 +86,7 @@ class PathPlanner:
         self.stopping_dist = stopping_dist #m
 
         #Trajectory Simulation Parameters
-        self.timestep = 5.0 #s
+        self.timestep = 5.0 #5.0 #s
         self.num_substeps = 10
 
         #Planning storage
@@ -101,7 +101,7 @@ class PathPlanner:
         self.zeta_d = np.pi
         self.gamma_RRT_star = 2 * (1 + 1/2) ** (1/2) * (self.lebesgue_free / self.zeta_d) ** (1/2)
         self.gamma_RRT = self.gamma_RRT_star + .1
-        self.epsilon = 1.0
+        self.epsilon = 2.5
 
         self.saved_trajs = {}
         
@@ -222,29 +222,35 @@ class PathPlanner:
 
         return i
     
-    def simulate_trajectory(self, point_i, point_s, fix_col = True, type  = 1):
+    def simulate_trajectory(self, point_i, point_s, fix_col = True, type  = 1, vel_max = None, rot_vel_max = None):
         #Simulates the non-holonomic motion of the robot.
         #This function drives the robot from node_i towards point_s. This function does has many solutions!
         #node_i is a 3 by 1 vector [x;y;theta] this can be used to construct the SE(2) matrix T_{OI} in course notation
         #point_s is the sampled point vector [x; y]
-        vel, rot_vel = self.robot_controller(point_i, point_s, type = type)
+        vel, rot_vel = self.robot_controller(point_i, point_s, type = type, vel_max = vel_max, rot_vel_max = rot_vel_max)
         vel = vel[None, :]
         rot_vel = rot_vel[None, :]
         robot_traj = self.trajectory_rollout(vel, rot_vel, point_i, fix_col = fix_col)[0]
         return robot_traj # (num_substeps, 3)
     
-    def robot_controller(self, point_i, point_s, type = 1):
+    def robot_controller(self, point_i, point_s, type = 1, vel_max = None, rot_vel_max = None, timestep = None):
         #This controller determines the velocities that will nominally move the robot from node i to node s
         #Max velocities should be enforced
         # point_i = [x_i; y_i; theta_i], shape (3, 1)
         # point_s = [x_s; y_s; theta_s], shape (3, 1)
 
+        if vel_max is None:
+            vel_max = self.vel_max
+        if rot_vel_max is None:
+            rot_vel_max = self.rot_vel_max
+        if timestep is None:
+            timestep = self.timestep
+
         # -------------------------------- grid search ----------------------------------------
 
         if type == 1:
-
-            vel_range = np.linspace(-self.vel_max, self.vel_max, 5)
-            omega_range = np.linspace(-self.rot_vel_max, self.rot_vel_max, 5)
+            vel_range = np.linspace(-vel_max, vel_max, 5)
+            omega_range = np.linspace(-rot_vel_max, rot_vel_max, 5)
             vo = np.dstack(np.meshgrid(vel_range, omega_range)).reshape(-1, 2)
             pts = self.trajectory_rollout(vo[:, 0:1], vo[:, 1:2], point_i)[:, -1:, :] # (N, 1, 3)
             point_s = point_s[None, :, 0]
@@ -273,69 +279,12 @@ class PathPlanner:
         # ------------------------------- analytic solution without theta ----------------------------
 
         elif type == 2:
-
-            t_wv = transformations.euler_matrix(0, 0, point_i[2])
-            t_wv[0, -1] = point_i[0]
-            t_wv[1, -1] = point_i[1]
-
-            t_vw = np.linalg.inv(t_wv)
-            ps_w = np.concatenate((point_s[:2], np.zeros_like(point_s[-1:]), np.ones_like(point_s[-1:])), axis = 0) # (4, 1)
-            ps_v = (t_vw @ ps_w)
-            pmirror_v = ps_v.copy() 
-            pmirror_v[0] *= -1
-            pmirror_w = t_wv @ pmirror_v
-
-            center_w, radius = define_circle(point_i[:2], point_s[:2], pmirror_w[:2]) 
-            if not np.isfinite(radius): # straight ahead or behind
-                #assert ps_v[1]  == 0, "y coord in vehicle frame must be 0"
-                v = np.clip(ps_v[0], -self.vel_max, self.vel_max)
-                omega = np.zeros((1,))
-            else:
-                center_w = np.concatenate((center_w, np.zeros_like(center_w[-1:]), np.ones_like(center_w[-1:])), axis = 0) # (4, 1)
-                center_v = t_vw @ center_w
-
-                max_r = self.vel_max / self.rot_vel_max
-
-                if center_v[1] < 0: # right turn
-                    if center_v[0] > 0: # forwards
-                        if radius > max_r:
-                            v = self.vel_max
-                            omega = -v / radius
-                        else:
-                            omega = - self.rot_vel_max
-                            v = omega * radius
-                    else: # backwards
-                        if radius > max_r:
-                            v = -self.vel_max
-                            omega = self.vel_max / radius
-                        else:
-                            omega = self.rot_vel_max
-                            v = - omega * radius
-                else: # left turn
-                    if center_v[0] > 0: # forwards
-                        if radius > max_r:
-                            v = self.vel_max
-                            omega = v / radius
-                        else:
-                            omega = self.rot_vel_max
-                            v = omega * radius
-                    else: # backwards
-                        if radius > max_r:
-                            v = -self.vel_max
-                            omega = v / radius
-                        else:
-                            omega = -self.rot_vel_max
-                            v = omega * radius
-
-
-                v = np.array([v]).reshape((1,))
-                omega = np.array([omega]).reshape((1,))
-
+            raise NotImplementedError("removed this implementation")
             return v, omega
    
 
     
-    def trajectory_rollout(self, vel, rot_vel, x_y_theta, fix_col = True):
+    def trajectory_rollout(self, vel, rot_vel, x_y_theta, fix_col = True, num_substeps = None, timestep = None):
         # Given your chosen velocities determine the trajectory of the robot for your given timestep
         # The returned trajectory should be a series of points to check for collisions
 
@@ -343,7 +292,12 @@ class PathPlanner:
         # vel.shape: (N, 1)
         # rot_vel: (N, 1)
 
-        t = np.linspace(0, self.timestep, self.num_substeps)[None, :] # (1, num_substeps)
+        if timestep is None:
+            timestep = self.timestep
+        if num_substeps is None:
+            num_substeps = self.num_substeps
+
+        t = np.linspace(0, timestep, num_substeps)[None, :] # (1, num_substeps)
         x0 = x_y_theta[0:1] # (N, 1)
         y0 = x_y_theta[1:2] # (N, 1)
         theta0 = x_y_theta[2:3] # (N, 1)
@@ -359,7 +313,7 @@ class PathPlanner:
         # take the maximum timestep that has no collision and copy that to all timesteps
         pts = np.stack((x, y), axis = -1) # (N, self.num_substeps, 2)
         p_w = pts.reshape((-1, 2)).T # (2, N * self.num_substeps)
-        collisions = self.is_colliding(p_w).reshape((vel.shape[0], self.num_substeps)) # (N*self.num_substeps)
+        collisions = self.is_colliding(p_w).reshape((vel.shape[0], num_substeps)) # (N*self.num_substeps)
 
         res = np.stack((x, y, theta), axis = -1) 
         if fix_col:
@@ -467,9 +421,72 @@ class PathPlanner:
         #Given two nodes find the non-holonomic path that connects them
         #Settings
         #point_i is a 3 by 1 point
-        #point_s is a 3 by 1 point
-        traj = self.simulate_trajectory(point_i, point_s, fix_col=False, type = 2)
+        #point_s is a 3 by 1 poinst
+        #traj = self.simulate_trajectory(point_i, point_s, fix_col=False, type = 2, vel_max = 10, rot_vel_max = 10)
         # traj will have nan's if there is a collision
+
+        t_wv = transformations.euler_matrix(0, 0, point_i[2])
+        t_wv[0, -1] = point_i[0]
+        t_wv[1, -1] = point_i[1]
+
+        t_vw = np.linalg.inv(t_wv)
+        ps_w = np.concatenate((point_s[:2], np.zeros_like(point_s[-1:]), np.ones_like(point_s[-1:])), axis = 0) # (4, 1)
+        ps_v = (t_vw @ ps_w)
+        pmirror_v = ps_v.copy() 
+        pmirror_v[0] *= -1
+        pmirror_w = t_wv @ pmirror_v
+
+        center_v, radius = define_circle(np.zeros_like(point_i[:2]), ps_v[:2], pmirror_v[:2]) 
+        # determine arc length
+
+
+        d = np.linalg.norm(point_i[:-1] - point_s[:-1])
+        if d == 0:
+            substeps = 3
+            traj = np.linspace(point_i, point_s, num = substeps) # (10, 3, 1)
+        elif not np.isfinite(radius): # straight ahead or behind
+            # check at sufficient resolution
+            substeps = np.ceil(d / self.robot_radius).astype(np.int)
+            traj = np.linspace(point_i, point_s, num = substeps) # (10, 3, 1)
+        else:
+            c_phi = 1 - ((d**2) / (2 * radius**2))
+            dphi = np.arctan2(np.sqrt(1 - c_phi**2), c_phi)
+            s = dphi * radius
+            substeps = np.ceil(s / self.robot_radius).astype(np.int).item()
+
+            xc_v = center_v[0]
+            yc_v = center_v[1]
+
+            cur_phi = 0
+            traj = []
+            for i in range(substeps + 1):
+                xy_v = np.array(
+                    [
+                        [xc_v + radius * np.sin(cur_phi) * np.sign(ps_v[0])],
+                        [yc_v - radius * np.cos(cur_phi) * np.sign(yc_v)],
+                        [0],
+                        [1],
+                    ]
+                )
+                xy_w = t_wv @ xy_v
+                traj.append(
+                    np.array(
+                        [
+                            xy_w[0, 0],
+                            xy_w[1, 0],
+                            cur_phi * np.sign(yc_v) + point_i[-1, 0],
+                        ]    
+                    )
+                )
+                cur_phi += (dphi / substeps) 
+            traj = np.stack(traj, axis = 0)
+
+        col_mask = self.is_colliding(traj[:, :-1, 0].T)
+        traj[col_mask == 1] = np.nan
+        traj = traj[:, :, 0]
+        assert len(traj.shape) == 2
+        assert traj.shape[1] == 3
+
         return traj
     
     def cost_to_come(self, trajectory_o):
@@ -552,7 +569,7 @@ class PathPlanner:
             closest_node_id = self.closest_node(point)[0]
 
             #Simulate trajectory
-            trajectory_o = self.simulate_trajectory(self.nodes[closest_node_id].point, point, fix_col = True, type = 1)
+            trajectory_o = self.simulate_trajectory(self.nodes[closest_node_id].point, point, fix_col = True)
             if np.any(np.isnan(trajectory_o)):
                 continue
 
@@ -590,6 +607,8 @@ class PathPlanner:
                 new_traj = self.connect_node_to_point(self.nodes[id].point, arrived_to_pt)
                 if np.any(np.isnan(new_traj)):
                     continue
+                #assert np.all(new_traj[0] == self.nodes[id].point[:, 0]), f"{new_traj[0]}, {self.nodes[id].point}"
+                #assert np.all(new_traj[-1, :-1] == arrived_to_pt[:-1, 0]), f"{new_traj}, {arrived_to_pt}"
                 curr_ctc = self.cost_to_come(new_traj) + self.nodes[id].cost
                 if curr_ctc < best_ctc:
                     best_ctc = curr_ctc
@@ -611,6 +630,8 @@ class PathPlanner:
                 new_traj = self.connect_node_to_point(arrived_to_pt, self.nodes[id].point)
                 if np.isnan(new_traj).any():
                     continue
+                #assert np.all(new_traj[0] == arrived_to_pt[:, 0])
+                #assert np.all(new_traj[-1, :-1] == self.nodes[id].point[:-1, 0])
                 new_ctc = self.cost_to_come(new_traj) + self.nodes[-1].cost
                 if new_ctc < self.nodes[id].cost:
                     self.nodes[self.nodes[id].parent_id].children_ids.remove(id)
@@ -618,7 +639,6 @@ class PathPlanner:
                     self.nodes[id].cost = new_ctc
                     self.nodes[-1].children_ids.append(id)
                     self.nodes[-1].traj_to_children[id] = new_traj
-                    print("Re-wiring")
                     self.update_children(id)
 
             if np.linalg.norm(arrived_to_pt[:-1] - self.goal_point) < self.stopping_dist: # reached goal
@@ -628,11 +648,15 @@ class PathPlanner:
         return self.nodes
     
     def recover_path(self, node_id = -1):
-        path = [self.nodes[node_id].point]
+        #path = [self.nodes[node_id].point]
         current_node_id = self.nodes[node_id].parent_id
-        while current_node_id > -1:
-            path.append(self.nodes[current_node_id].point)
-            current_node_id = self.nodes[current_node_id].parent_id
+        path = [self.nodes[current_node_id].traj_to_children[len(self.nodes) - 1]]
+        while current_node_id > 0: #current_node_id > -1:
+            #path.append(self.nodes[current_node_id].point)
+            parent_id = self.nodes[current_node_id].parent_id
+            traj = self.nodes[parent_id].traj_to_children[current_node_id]
+            current_node_id = parent_id
+            path.append(traj)
         path.reverse()
         return path
 
@@ -643,7 +667,7 @@ def main():
 
     #robot information
     goal_point = np.array([[42], [-44]]) #m
-    #goal_point = np.array([[10], [0]]) #m
+    #goal_point = np.array([[20], [0]]) #m
     stopping_dist = 0.5 #m
 
     #RRT precursor
@@ -658,16 +682,18 @@ def main():
 
     #path = np.load("/home/agrobenj/catkin_ws/src/rob521_labs/lab2/nodes/path_complete.npy").T[:, :, None]
     #print(path.shape)
-    node_path_metric = np.hstack(path)
+    #node_path_metric = np.hstack(path)
 
-    last_node = path[0]
-    for node in path[1:]:
-        path_planner.window.add_line(last_node[:2, 0].copy(), node[:2, 0].copy(), width = 3, color = (0, 0, 255))
-        last_node = node
+    #last_node = path[0]
+    for traj in path:
+        #traj = path_planner.connect_node_to_point(last_node, node)
+        for last_pt, pt in zip(traj[:-1], traj[1:]):
+            path_planner.window.add_line(last_pt[:2].copy(), pt[:2].copy(), width = 3, color = (0, 0, 255))
+        #path_planner.window.add_line(last_node[:2, 0].copy(), node[:2, 0].copy(), width = 3, color = (0, 0, 255))
     input("Press Enter to Save")
 
     #Leftover test functions
-    np.save(f"shortest_path_{method}.npy", node_path_metric)
+    #np.save(f"shortest_path_{method}.npy", node_path_metric)
 
 
 if __name__ == '__main__':
