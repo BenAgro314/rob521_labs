@@ -539,13 +539,11 @@ class PathPlanner:
             self.window.add_point(arrived_to_pt[:-1, 0].copy())
             assert not self.is_colliding(arrived_to_pt[:-1])
 
-            self.min_pt = np.minimum(self.min_pt, arrived_to_pt)
-            self.max_pt = np.maximum(self.max_pt, arrived_to_pt)
-            #print(self.min_pt)
-            #print(self.max_pt)
 
             self.nodes.append(Node(point = arrived_to_pt, parent_id = closest_node_id, cost = 0)) # no cost for RRT
             self.node_pts = np.concatenate((self.node_pts, arrived_to_pt[:2][None]), axis = 0)
+            self.nodes[closest_node_id].children_ids.append(len(self.nodes) - 1)
+            self.nodes[closest_node_id].traj_to_children[len(self.nodes) - 1] = trajectory_o
 
             if np.linalg.norm(arrived_to_pt[:-1] - self.goal_point) < self.stopping_dist: # reached goal
                 break
