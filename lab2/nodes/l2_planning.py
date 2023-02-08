@@ -2,6 +2,7 @@
 #Standard Libraries
 import numpy as np
 import scipy
+from copy import copy
 import yaml
 import os
 import pygame
@@ -108,8 +109,12 @@ class PathPlanner:
         #Pygame window for visualization
         self.window = pygame_utils.PygameWindow(
             "Path Planner", (1000, 1000), self.occupancy_map.shape, self.map_settings_dict, self.goal_point, self.stopping_dist)
-        return
 
+        self.goal_nodes = {}
+        self.best_goal_node_id = None
+
+        self.bounds = np.array([[-3.5, 43.5],[-49.25, 10.5]])
+        self.min_cost = np.linalg.norm(self.goal_point[:2] - self.start_point[:2])
 
     @cached_property
     def t_wm(self):
@@ -124,23 +129,21 @@ class PathPlanner:
     def t_mw(self):
         return np.linalg.inv(self.t_wm)
 
+    def get_max_cost(self):
+        if self.best_goal_node_id is None:
+            return np.inf
+            #return np.linalg.norm(self.bounds[0] - self.bounds[1], ord = 1)
+        else:
+            return self.goal_nodes[self.best_goal_node_id].cost
+
     def sample_map_space(self):
-        #Return an [x,y] coordinate to drive the robot towards
-        #The real bounds are at [[-21.  ,  59.  ], [-49.25,  30.75]]
-        # The bounds of the house are at pixels length:  380 to 1300 height: 400 to 1570, or 30 to 1200
-        #In meters this is 18 to 65 and 1.5 to 60
-        # Origin is at -21.0, -49.25,
-        #So this translates to -3.5 to 43.5 and -47.5 to 10.5 in the real frame
-        #if self.nodes[self.closest_node(self.goal)]
         sample_goal = np.random.rand() < 0.05
 
         if not sample_goal:
-            new_bounds = np.array([[-3.5, 43.5],[-49.25, 10.5]])
-            #new_bounds = np.copy(self.bounds)
-            x = np.random.rand() * (new_bounds[0, 1] - new_bounds[0, 0])  + new_bounds[0, 0] 
-            y = np.random.rand() * (new_bounds[1, 1] - new_bounds[1, 0])  + new_bounds[1, 0] 
-            theta = np.random.rand() * 2 * np.pi  - np.pi # [pi, -pi]
-            point = np.array([[x], [y], [theta]])
+            #x = np.random.rand() * (self.bounds[0, 1] - self.bounds[0, 0])  + self.bounds[0, 0] 
+            #y = np.random.rand() * (self.bounds[1, 1] - self.bounds[1, 0])  + self.bounds[1, 0] 
+            #theta = np.random.rand() * 2 * np.pi  - np.pi # [pi, -pi]
+            #point = np.array([[x], [y], [theta]])
 
             #other_pt = point + np.random.randn(3, 1)
             #other_pt[-1] = theta
@@ -152,11 +155,20 @@ class PathPlanner:
             #    return point
             #elif not col2 and col1:
             #    return other_pt
+            while True:
+                x = np.random.rand() * (self.bounds[0, 1] - self.bounds[0, 0])  + self.bounds[0, 0] 
+                y = np.random.rand() * (self.bounds[1, 1] - self.bounds[1, 0])  + self.bounds[1, 0] 
+                theta = np.random.rand() * 2 * np.pi  - np.pi # [pi, -pi]
+                point = np.array([[x], [y], [theta]])
+                cost = np.linalg.norm(self.start_point[:2] - point[:2]) + np.linalg.norm(point[:2] - self.goal_point[:2])
+                if cost < self.get_max_cost():
+                    break
         else:
             theta = np.random.rand() * 2 * np.pi  - np.pi # [pi, -pi]
             dx = 4 * self.stopping_dist * np.random.randn()
             dy = 4 * self.stopping_dist * np.random.randn()
             point = np.array([[self.goal_point[0, 0] +dx], [self.goal_point[1, 0] + dy], [theta]])
+
 
         return point
 
@@ -490,9 +502,7 @@ class PathPlanner:
         return traj
     
     def cost_to_come(self, trajectory_o):
-        #The cost to get to a node from lavalle 
-        #print("TO DO: Implement a cost to come metric")
-        dist = np.linalg.norm(trajectory_o[0] - trajectory_o[-1])
+        dist = np.linalg.norm(trajectory_o[1:, :2] - trajectory_o[:-1, :2], axis = -1).sum()
         return dist
     
     def update_children(self, node_id):
@@ -527,7 +537,7 @@ class PathPlanner:
             #print(f"Closest point {self.nodes[closest_node_id].point}")
 
             #Simulate driving the robot towards the closest point
-            trajectory_o = self.simulate_trajectory(self.nodes[closest_node_id].point, point, fix_col = True, type = 1)
+            trajectory_o = self.simulate_trajectory(self.nodes[closest_node_id].point, point, fix_col = True)
             if np.any(np.isnan(trajectory_o)):
                 continue
 
@@ -546,16 +556,18 @@ class PathPlanner:
             self.nodes[closest_node_id].traj_to_children[len(self.nodes) - 1] = trajectory_o
 
             if np.linalg.norm(arrived_to_pt[:-1] - self.goal_point) < self.stopping_dist: # reached goal
+                self.goal_nodes[len(self.nodes) - 1] = self.nodes[-1]
+                self.best_goal_node_id = len(self.nodes) - 1
                 break
 
             i += 1
 
         return self.nodes
     
-    def rrt_star_planning(self):
+    def rrt_star_planning(self, max_iters = 4000):
         #This function performs RRT* for the given map and robot        
         i = 0
-        while True:
+        while len(self.goal_nodes) == 0 or i < max_iters:
             print(i)
 
             #Sample
@@ -640,21 +652,18 @@ class PathPlanner:
                     self.update_children(id)
 
             if np.linalg.norm(arrived_to_pt[:-1] - self.goal_point) < self.stopping_dist: # reached goal
-                break
-        
+                self.goal_nodes[len(self.nodes) - 1] = self.nodes[-1]
+                if self.best_goal_node_id is None or self.goal_nodes[self.best_goal_node_id].cost > self.nodes[-1].cost:
+                    self.best_goal_node_id = len(self.nodes) - 1
 
         return self.nodes
-    
-    def recover_path(self, node_id = -1):
-        #path = [self.nodes[node_id].point]
-        current_node_id = self.nodes[node_id].parent_id
-        path = [self.nodes[current_node_id].traj_to_children[len(self.nodes) - 1]]
-        while current_node_id > 0: #current_node_id > -1:
-            #path.append(self.nodes[current_node_id].point)
-            parent_id = self.nodes[current_node_id].parent_id
-            traj = self.nodes[parent_id].traj_to_children[current_node_id]
-            current_node_id = parent_id
-            path.append(traj)
+
+    def recover_path(self):
+        path = [(self.nodes[self.best_goal_node_id], self.best_goal_node_id)]
+        current_node_id = self.nodes[self.best_goal_node_id].parent_id
+        while current_node_id > -1:
+            path.append((self.nodes[current_node_id], current_node_id))
+            current_node_id = self.nodes[current_node_id].parent_id
         path.reverse()
         return path
 
@@ -672,7 +681,7 @@ def main():
     path_planner = PathPlanner(map_filename, map_setings_filename, goal_point, stopping_dist)
     method = "rrt_star"
     if method == "rrt_star":
-        nodes = path_planner.rrt_star_planning()
+        nodes = path_planner.rrt_star_planning(max_iters = 4000)
     else:
         nodes = path_planner.rrt_planning()
     print("done")
@@ -680,18 +689,23 @@ def main():
 
     #path = np.load("/home/agrobenj/catkin_ws/src/rob521_labs/lab2/nodes/path_complete.npy").T[:, :, None]
     #print(path.shape)
-    #node_path_metric = np.hstack(path)
+    node_path_metric = np.hstack(path)
 
-    #last_node = path[0]
-    for traj in path:
-        #traj = path_planner.connect_node_to_point(last_node, node)
-        for last_pt, pt in zip(traj[:-1], traj[1:]):
-            path_planner.window.add_line(last_pt[:2].copy(), pt[:2].copy(), width = 3, color = (0, 0, 255))
-        #path_planner.window.add_line(last_node[:2, 0].copy(), node[:2, 0].copy(), width = 3, color = (0, 0, 255))
+    plot_full = True
+
+    if plot_full:
+        for (n1, n1_id), (n2, n2_id) in zip(path[:-1], path[1:]):
+            trajectory = n1.traj_to_children[n2_id]
+            for pt1, pt2 in zip(trajectory[:-1], trajectory[1:]):
+                path_planner.window.add_line(pt1[:2].copy(), pt2[:2].copy(), width = 3, color = (0, 0, 255))
+                #last_node = node
+    else:
+        for (n1, n1_id), (n2, n2_id) in zip(path[:-1], path[1:]):
+            path_planner.window.add_line(n1.point[:2, 0].copy(), n2.point[:2, 0].copy(), width = 3, color = (0, 0, 255))
+        
     input("Press Enter to Save")
 
-    #Leftover test functions
-    #np.save(f"shortest_path_{method}.npy", node_path_metric)
+    np.save(f"shortest_path_{method}.npy", node_path_metric)
 
 
 if __name__ == '__main__':
