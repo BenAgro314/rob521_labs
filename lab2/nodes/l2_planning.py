@@ -172,41 +172,6 @@ class PathPlanner:
 
         return point
 
-    #Functions required for RRT
-    def sample_map_space_old(self):
-        #Return an [x,y] coordinate to drive the robot towards
-        #print("TO DO: Sample point to drive towards")
-
-        # sample point around current points
-
-        sample_goal = np.random.rand() < 0.1
-        # sample points from un-occupied space
-        theta = np.random.rand() * 2 * np.pi  - np.pi # [pi, -pi]
-        if not sample_goal:
-
-            x = np.random.rand() * (self.bounds[0, 1] - self.bounds[0, 0])  + self.bounds[0, 0] 
-            y = np.random.rand() * (self.bounds[1, 1] - self.bounds[1, 0])  + self.bounds[1, 0] 
-            theta = np.random.rand() * 2 * np.pi  - np.pi # [pi, -pi]
-            point = np.array([[x], [y], [theta]])
-            
-            #r = np.abs(np.linalg.norm(self.goal_point - self.start_point[:-1]) * np.random.randn())
-            #dphi = np.random.rand() * 2 * np.pi  - np.pi # [pi, -pi]
-            #dx = r * np.cos(dphi)
-            #dy = r * np.sin(dphi)
-            #point = np.array([[self.goal_point[0, 0] +dx], [self.goal_point[1, 0] + dy], [theta]])
-
-            #max_pt = self.max_pt + 5 * self.vel_max
-            #min_pt = self.min_pt - 5 * self.vel_max
-
-            #point = np.random.rand(3, 1) * (max_pt - min_pt) + min_pt
-            #point[-1] = theta
-        else:
-            theta = np.random.rand() * 2 * np.pi  - np.pi # [pi, -pi]
-            dx = 4 * self.stopping_dist * np.random.randn()
-            dy = 4 * self.stopping_dist * np.random.randn()
-            point = np.array([[self.goal_point[0, 0] +dx], [self.goal_point[1, 0] + dy], [theta]])
-        return point 
-    
     def check_if_duplicate(self, point):
         #Check if point is a duplicate of an already existing node
         # TODO
@@ -317,9 +282,9 @@ class PathPlanner:
         x = np.zeros((rot_vel.shape[0], t.shape[1])) # (N, num_substeps)
         y = np.zeros((rot_vel.shape[0], t.shape[1]))
 
-        x = np.where(rot_vel == 0, vel * t * np.cos(theta0) + x0, (vel / rot_vel)  * (np.sin(rot_vel * t + theta0) - np.sin(theta0)) + x0)
-        y = np.where(rot_vel == 0, vel * t * np.sin(theta0) + y0, -(vel / rot_vel)  * (np.cos(rot_vel * t + theta0) - np.cos(theta0)) + y0)
-        theta = np.where(rot_vel == 0, theta0 * np.ones_like(rot_vel * t), rot_vel * t + theta0)
+        x = np.where(np.isclose(rot_vel, 0), vel * t * np.cos(theta0) + x0, (vel / rot_vel)  * (np.sin(rot_vel * t + theta0) - np.sin(theta0)) + x0)
+        y = np.where(np.isclose(rot_vel, 0), vel * t * np.sin(theta0) + y0, -(vel / rot_vel)  * (np.cos(rot_vel * t + theta0) - np.cos(theta0)) + y0)
+        theta = np.where(np.isclose(rot_vel, 0), theta0 * np.ones_like(rot_vel * t), rot_vel * t + theta0)
 
         # to check collisions, check if any of the x,y pairs result in collision.
         # take the maximum timestep that has no collision and copy that to all timesteps

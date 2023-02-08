@@ -200,6 +200,8 @@ class PathFollower():
             # uncomment out for debugging if necessary
             print("Selected control: {control}, Loop time: {time}, Max time: {max_time}".format(
                 control=control, time=(rospy.Time.now() - tic).to_sec(), max_time=1/CONTROL_RATE))
+            
+            self.prev_control = None
 
             self.rate.sleep()
 
