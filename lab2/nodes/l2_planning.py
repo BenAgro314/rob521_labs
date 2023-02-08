@@ -670,7 +670,7 @@ class PathPlanner:
 def main():
     #Set map information
     map_filename = "willowgarageworld_05res.png"
-    map_setings_filename = "willowgarageworld_05res.yaml"
+    map_settings_filename = "willowgarageworld_05res.yaml"
 
     #robot information
     goal_point = np.array([[42], [-44]]) #m
@@ -678,7 +678,7 @@ def main():
     stopping_dist = 0.5 #m
 
     #RRT precursor
-    path_planner = PathPlanner(map_filename, map_setings_filename, goal_point, stopping_dist)
+    path_planner = PathPlanner(map_filename, map_settings_filename, goal_point, stopping_dist)
     method = "rrt_star"
     if method == "rrt_star":
         nodes = path_planner.rrt_star_planning(max_iters = 4000)
@@ -689,7 +689,7 @@ def main():
 
     #path = np.load("/home/agrobenj/catkin_ws/src/rob521_labs/lab2/nodes/path_complete.npy").T[:, :, None]
     #print(path.shape)
-    node_path_metric = np.hstack(path)
+    node_path_metric = np.hstack(np.array([n[0].point for n in path]))
 
     plot_full = True
 
