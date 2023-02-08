@@ -21,7 +21,8 @@ class PygameWindow:
                  real_map_size_pixels,
                  map_settings_dict,
                  goal_point,
-                 stopping_dist):
+                 stopping_dist,
+                 map_img):
 
         pygame.init()
         pygame.display.set_caption(name)
@@ -31,7 +32,7 @@ class PygameWindow:
         self.map_settings_dict = map_settings_dict
         self.origin = np.array(map_settings_dict['origin'])
 
-        map_img = pygame.image.load(os.path.join(get_maps_dir(), 'willowgarageworld_05res.png'))
+        map_img = pygame.image.load(os.path.join(get_maps_dir(), map_img))
         map_img = pygame.transform.scale(map_img, self.size)
 
         self.screen = pygame.display.set_mode(self.size)

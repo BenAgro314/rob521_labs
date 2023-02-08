@@ -67,6 +67,8 @@ class PathPlanner:
     def __init__(self, map_filename, map_setings_filename, goal_point, stopping_dist):
         #Get map information
         self.occupancy_map = load_map(map_filename)
+        if len(self.occupancy_map.shape) == 3:
+            self.occupancy_map = self.occupancy_map[:, :, 0]
         self.map_shape = self.occupancy_map.shape
         self.map_settings_dict = load_map_yaml(map_setings_filename)
 
@@ -107,13 +109,17 @@ class PathPlanner:
         self.saved_trajs = {}
         
         #Pygame window for visualization
+        if map_filename == "willowgarageworld_05res.png":
+            self.bounds = np.array([[-3.5, 43.5],[-49.25, 10.5]])
+            sh = self.occupancy_map.shape
+        else:
+            sh = (self.occupancy_map.shape[1] * 5, self.occupancy_map.shape[0] * 5)
         self.window = pygame_utils.PygameWindow(
-            "Path Planner", (1000, 1000), self.occupancy_map.shape, self.map_settings_dict, self.goal_point, self.stopping_dist)
+            "Path Planner", sh, self.occupancy_map.T.shape, self.map_settings_dict, self.goal_point, self.stopping_dist, map_filename)
 
         self.goal_nodes = {}
         self.best_goal_node_id = None
 
-        self.bounds = np.array([[-3.5, 43.5],[-49.25, 10.5]])
         self.min_cost = np.linalg.norm(self.goal_point[:2] - self.start_point[:2])
 
     @cached_property
@@ -155,14 +161,14 @@ class PathPlanner:
             #    return point
             #elif not col2 and col1:
             #    return other_pt
-            while True:
-                x = np.random.rand() * (self.bounds[0, 1] - self.bounds[0, 0])  + self.bounds[0, 0] 
-                y = np.random.rand() * (self.bounds[1, 1] - self.bounds[1, 0])  + self.bounds[1, 0] 
-                theta = np.random.rand() * 2 * np.pi  - np.pi # [pi, -pi]
-                point = np.array([[x], [y], [theta]])
-                cost = np.linalg.norm(self.start_point[:2] - point[:2]) + np.linalg.norm(point[:2] - self.goal_point[:2])
-                if cost < self.get_max_cost():
-                    break
+            #while True:
+            x = np.random.rand() * (self.bounds[0, 1] - self.bounds[0, 0])  + self.bounds[0, 0] 
+            y = np.random.rand() * (self.bounds[1, 1] - self.bounds[1, 0])  + self.bounds[1, 0] 
+            theta = np.random.rand() * 2 * np.pi  - np.pi # [pi, -pi]
+            point = np.array([[x], [y], [theta]])
+            #cost = np.linalg.norm(self.start_point[:2] - point[:2]) + np.linalg.norm(point[:2] - self.goal_point[:2])
+            #    if cost < self.get_max_cost():
+            #        break
         else:
             theta = np.random.rand() * 2 * np.pi  - np.pi # [pi, -pi]
             dx = 4 * self.stopping_dist * np.random.randn()
@@ -310,7 +316,13 @@ class PathPlanner:
         footprints = self.points_to_robot_circle(p_w) # (N, pts_per_circle, 2)
         # TODO: batch over footprints. Problem: some footprints have different number of points
         #res = np.zeros((p_w.shape[1], )) # (N, )
-        is_col = np.any(self.occupancy_map[footprints[..., 1], footprints[..., 0]] == 0, axis = -1)# (N, pts_per_circle)
+        rows = footprints[..., 1]
+        #rows[rows >= self.occupancy_map.shape[0]] = self.occupancy_map.shape[0] - 1
+        #rows[rows < 0] = 0
+        cols = footprints[..., 0]
+        #cols[cols >= self.occupancy_map.shape[1]] = self.occupancy_map.shape[1] - 1
+        #cols[cols < 0] = 0
+        is_col = np.any(self.occupancy_map[rows, cols] == 0, axis = -1)# (N, pts_per_circle)
         return is_col
 
     def cell_to_point(self, ind):
@@ -336,7 +348,7 @@ class PathPlanner:
         p_m = self.t_mw @ p_w
         p_m /= res
         x_idx = p_m[:, 0].astype(int)
-        y_idx = (self.map_shape[1] - p_m[:, 1]).astype(int) # Note that image coordinate y-axis points down
+        y_idx = (self.map_shape[0] - p_m[:, 1]).astype(int) # Note that image coordinate y-axis points down
         return np.concatenate((x_idx, y_idx), axis = -1) # (N, 2)
 
     def points_to_robot_circle(self, points):
@@ -361,11 +373,11 @@ class PathPlanner:
         y_circlePts = np.tile(inds[:,1],(y_indexings.shape[1],1)).T  + y_indexings # (N,len_indexings^2)
 
         x_circlePts = x_circlePts[distances < radius].reshape((N,-1))
-        x_circlePts[x_circlePts >= self.occupancy_map.shape[0]] = self.occupancy_map.shape[0] - 1
+        x_circlePts[x_circlePts >= self.occupancy_map.shape[1]] = self.occupancy_map.shape[1] - 1
         x_circlePts[x_circlePts<0]=0
 
         y_circlePts = y_circlePts[distances < radius].reshape((N,-1))
-        y_circlePts[y_circlePts >= self.occupancy_map.shape[1]] = self.occupancy_map.shape[1] - 1
+        y_circlePts[y_circlePts >= self.occupancy_map.shape[0]] = self.occupancy_map.shape[0] - 1
         y_circlePts[y_circlePts<0]=0
         
         circlePts = np.stack((x_circlePts,y_circlePts),axis=-1) # (num_pts, num_pts_per_circle, 2)
@@ -633,30 +645,35 @@ class PathPlanner:
         return path
 
 def main():
-    #Set map information
-    map_filename = "willowgarageworld_05res.png"
-    map_settings_filename = "willowgarageworld_05res.yaml"
+    #Set map information for willow
+    #map_filename = "willowgarageworld_05res.png"
+    #map_settings_filename = "willowgarageworld_05res.yaml"
+    #goal_point = np.array([[42], [-44]]) #m
+    #goal_point = np.array([[20], [0]]) #m
+
+    # set map info for myhal
+    map_filename = "myhal.png"
+    map_settings_filename = "myhal.yaml"
+    goal_point = np.array([[7], [0]]) #m
 
     #robot information
-    goal_point = np.array([[42], [-44]]) #m
-    #goal_point = np.array([[20], [0]]) #m
     stopping_dist = 0.5 #m
 
     #RRT precursor
     path_planner = PathPlanner(map_filename, map_settings_filename, goal_point, stopping_dist)
     method = "rrt_star"
-    if method == "rrt_star":
-        nodes = path_planner.rrt_star_planning(max_iters = 4000)
+    # TODO: fix cycles in RRTstar
+    if method == "rrt":
+        nodes = path_planner.rrt_star_planning(max_iters = 1000)
     else:
         nodes = path_planner.rrt_planning()
-    print("done")
     path = path_planner.recover_path()
 
     #path = np.load("/home/agrobenj/catkin_ws/src/rob521_labs/lab2/nodes/path_complete.npy").T[:, :, None]
     #print(path.shape)
     node_path_metric = np.hstack(np.array([n[0].point for n in path]))
 
-    plot_full = True
+    plot_full = False
 
     if plot_full:
         for (n1, n1_id), (n2, n2_id) in zip(path[:-1], path[1:]):
@@ -670,7 +687,7 @@ def main():
         
     input("Press Enter to Save")
 
-    np.save(f"shortest_path_{method}.npy", node_path_metric)
+    np.save(f"shortest_path_{method}_{os.path.splitext(map_filename)[0]}.npy", node_path_metric)
 
 
 if __name__ == '__main__':
