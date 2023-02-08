@@ -16,7 +16,6 @@ from visualization_msgs.msg import Marker
 
 # ros and se2 conversion utils
 import utils
-import matplotlib.pyplot as plt
 
 
 TRANS_GOAL_TOL = .1  # m, tolerance to consider a goal complete
@@ -228,11 +227,6 @@ class PathFollower():
                 traj = local_paths[final_cost.argmin()]
                 self.local_path_pub.publish(utils.se2_pose_list_to_path(traj, 'map'))
                 self.prev_path = traj
-                #for pt1, pt2 in zip(traj[:-1], traj[1:]):
-                    #self.planner.window.add_line(pt1[:2].copy(), pt2[:2].copy(), width = 3, color = (0, 0, 255))
-                plt.plot(traj[:, :2])
-                plt.savefig(f"imgs/out_{rospy.Time.now().to_sec()}.png")
-                plt.close("all")
 
             self.prev_control = control
 
