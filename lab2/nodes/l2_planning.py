@@ -17,6 +17,7 @@ from functools import cached_property
 from scipy.linalg import block_diag
 from tf import transformations
 import scipy
+import warnings
 
 np.random.seed(11) #11 Works well for rtt*
 
@@ -288,8 +289,10 @@ class PathPlanner:
         x = np.zeros((rot_vel.shape[0], t.shape[1])) # (N, num_substeps)
         y = np.zeros((rot_vel.shape[0], t.shape[1]))
 
-        x = np.where(np.isclose(rot_vel, 0), vel * t * np.cos(theta0) + x0, (vel / rot_vel)  * (np.sin(rot_vel * t + theta0) - np.sin(theta0)) + x0)
-        y = np.where(np.isclose(rot_vel, 0), vel * t * np.sin(theta0) + y0, -(vel / rot_vel)  * (np.cos(rot_vel * t + theta0) - np.cos(theta0)) + y0)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=RuntimeWarning) 
+            x = np.where(np.isclose(rot_vel, 0), vel * t * np.cos(theta0) + x0, (vel / rot_vel)  * (np.sin(rot_vel * t + theta0) - np.sin(theta0)) + x0)
+            y = np.where(np.isclose(rot_vel, 0), vel * t * np.sin(theta0) + y0, -(vel / rot_vel)  * (np.cos(rot_vel * t + theta0) - np.cos(theta0)) + y0)
         theta = np.where(np.isclose(rot_vel, 0), theta0 * np.ones_like(rot_vel * t), rot_vel * t + theta0)
 
         # to check collisions, check if any of the x,y pairs result in collision.
@@ -435,13 +438,13 @@ class PathPlanner:
             traj = np.linspace(point_i, point_s, num = substeps) # (10, 3, 1)
         elif not np.isfinite(radius): # straight ahead or behind
             # check at sufficient resolution
-            substeps = np.ceil(d / self.robot_radius).astype(np.int) + 1
+            substeps = np.ceil(d / self.robot_radius).astype(np.int64) + 1
             traj = np.linspace(point_i, point_s, num = substeps) # (10, 3, 1)
         else:
             c_phi = 1 - ((d**2) / (2 * radius**2))
             dphi = np.arctan2(np.sqrt(1 - c_phi**2), c_phi)
             s = dphi * radius
-            substeps = np.ceil(s / self.robot_radius).astype(np.int).item()
+            substeps = np.ceil(s / self.robot_radius).astype(np.int64).item()
 
             xc_v = center_v[0]
             yc_v = center_v[1]
@@ -451,8 +454,8 @@ class PathPlanner:
             for i in range(substeps + 1):
                 xy_v = np.array(
                     [
-                        [xc_v + radius * np.sin(cur_phi) * np.sign(ps_v[0])],
-                        [yc_v - radius * np.cos(cur_phi) * np.sign(yc_v)],
+                        [(xc_v + radius * np.sin(cur_phi) * np.sign(ps_v[0]))[0]],
+                        [(yc_v - radius * np.cos(cur_phi) * np.sign(yc_v))[0]],
                         [0],
                         [1],
                     ]
@@ -461,8 +464,8 @@ class PathPlanner:
                 traj.append(
                     np.array(
                         [
-                            xy_w[0, 0],
-                            xy_w[1, 0],
+                            xy_w[0, 0,None],
+                            xy_w[1, 0,None],
                             cur_phi * np.sign(yc_v) + point_i[-1, 0],
                         ]    
                     )
