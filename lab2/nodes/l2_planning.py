@@ -671,8 +671,8 @@ def main():
         nodes = path_planner.rrt_planning()
     path = path_planner.recover_path()
 
-    #path = np.load("/home/agrobenj/catkin_ws/src/rob521_labs/lab2/nodes/path_complete.npy").T[:, :, None]
-    #print(path.shape)
+    #path = np.load("/home/agrobenj/catkin_ws/src/rob521_labs/lab2/shortest_path_rrt_star_willowgarageworld_05res.npy").T[:, :, None]
+    print(path.shape)
     node_path_metric = np.hstack(np.array([n[0].point for n in path]))
 
     plot_full = False
@@ -692,5 +692,26 @@ def main():
     np.save(f"shortest_path_{method}_{os.path.splitext(map_filename)[0]}.npy", node_path_metric)
 
 
+def plot_path():
+    #map_filename = "willowgarageworld_05res.png"
+    #map_settings_filename = "willowgarageworld_05res.yaml"
+    #goal_point = np.array([[42], [-44]]) #m
+
+    map_filename = "myhal.png"
+    map_settings_filename = "myhal.yaml"
+    goal_point = np.array([[7], [0]]) #m
+
+    stopping_dist = 0.5 #m
+    path_planner = PathPlanner(map_filename, map_settings_filename, goal_point, stopping_dist)
+    path = "/home/agrobenj/catkin_ws/src/rob521_labs/lab2/shortest_path_rrt_star_myhal.npy"
+    filename = os.path.splitext(os.path.split(path)[-1])[0]
+    path = np.load(path).T[:, :, None]
+    for p1, p2 in zip(path[:-1], path[1:]):
+        path_planner.window.add_line(p1[:2, 0].copy(), p2[:2, 0].copy(), width = 3, color = (0, 0, 255))
+
+    pygame.image.save(path_planner.window.screen, f"{filename}.png")
+    input("Enter to close")
+
 if __name__ == '__main__':
-    main()
+    #main()
+    plot_path()
