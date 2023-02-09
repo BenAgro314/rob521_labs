@@ -19,7 +19,8 @@ from tf import transformations
 import scipy
 import warnings
 
-np.random.seed(4) #11 Works well for rtt*
+#np.random.seed(4) #4 Works well for rtt* on willow
+np.random.seed(11) #11 for myhal
 
 #Map Handling Functions
 def load_map(filename):
@@ -65,7 +66,7 @@ def define_circle(p1, p2, p3):
 #Path Planner 
 class PathPlanner:
     #A path planner capable of perfomring RRT and RRT*
-    def __init__(self, map_filename, map_setings_filename, goal_point, stopping_dist):
+    def __init__(self, map_filename, map_setings_filename, goal_point, stopping_dist, window = True):
         #Get map information
         self.occupancy_map = load_map(map_filename)
         if len(self.occupancy_map.shape) == 3:
@@ -115,8 +116,10 @@ class PathPlanner:
             sh = (self.occupancy_map.shape[1] // 2, self.occupancy_map.shape[0] // 2)
         else:
             sh = (self.occupancy_map.shape[1] * 5, self.occupancy_map.shape[0] * 5)
-        self.window = pygame_utils.PygameWindow(
-            "Path Planner", sh, self.occupancy_map.T.shape, self.map_settings_dict, self.goal_point, self.stopping_dist, map_filename)
+        self.window = None
+        if window:
+            self.window = pygame_utils.PygameWindow(
+                "Path Planner", sh, self.occupancy_map.T.shape, self.map_settings_dict, self.goal_point, self.stopping_dist, map_filename)
 
         self.goal_nodes = {}
         self.best_goal_node_id = None
@@ -666,13 +669,13 @@ def main():
     path_planner = PathPlanner(map_filename, map_settings_filename, goal_point, stopping_dist)
     method = "rrt_star"
     if method == "rrt_star":
-        nodes = path_planner.rrt_star_planning(max_iters = 1000)
+        nodes = path_planner.rrt_star_planning(max_iters = 0)
     else:
         nodes = path_planner.rrt_planning()
     path = path_planner.recover_path()
 
     #path = np.load("/home/agrobenj/catkin_ws/src/rob521_labs/lab2/shortest_path_rrt_star_willowgarageworld_05res.npy").T[:, :, None]
-    print(path.shape)
+    #print(path.shape)
     node_path_metric = np.hstack(np.array([n[0].point for n in path]))
 
     plot_full = False
@@ -713,5 +716,5 @@ def plot_path():
     input("Enter to close")
 
 if __name__ == '__main__':
-    #main()
-    plot_path()
+    main()
+    #plot_path()
