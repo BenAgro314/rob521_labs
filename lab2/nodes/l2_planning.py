@@ -19,7 +19,7 @@ from tf import transformations
 import scipy
 import warnings
 
-np.random.seed(11) #11 Works well for rtt*
+np.random.seed(4) #11 Works well for rtt*
 
 #Map Handling Functions
 def load_map(filename):
@@ -82,7 +82,7 @@ class PathPlanner:
 
         #Robot information
         self.robot_radius = 0.22 #m
-        self.vel_max = 0.2 # 0.5 #m/s (Feel free to change!)
+        self.vel_max = 0.26 # 0.5 #m/s (Feel free to change!)
         self.rot_vel_max = 1.82 #0.2 #rad/s (Feel free to change!)
 
         #Goal Parameters
@@ -90,7 +90,7 @@ class PathPlanner:
         self.stopping_dist = stopping_dist #m
 
         #Trajectory Simulation Parameters
-        self.timestep = 5.0 #5.0 #s
+        self.timestep = 3.0 #5.0 #s
         self.num_substeps = 10
 
         #Planning storage
@@ -112,7 +112,7 @@ class PathPlanner:
         #Pygame window for visualization
         if map_filename == "willowgarageworld_05res.png":
             self.bounds = np.array([[-3.5, 43.5],[-49.25, 10.5]])
-            sh = self.occupancy_map.shape
+            sh = (self.occupancy_map.shape[1] // 2, self.occupancy_map.shape[0] // 2)
         else:
             sh = (self.occupancy_map.shape[1] * 5, self.occupancy_map.shape[0] * 5)
         self.window = pygame_utils.PygameWindow(
@@ -652,7 +652,7 @@ def main():
     #map_filename = "willowgarageworld_05res.png"
     #map_settings_filename = "willowgarageworld_05res.yaml"
     #goal_point = np.array([[42], [-44]]) #m
-    #goal_point = np.array([[20], [0]]) #m
+    # goal_point = np.array([[20], [0]]) #m
 
     # set map info for myhal
     map_filename = "myhal.png"
@@ -666,7 +666,7 @@ def main():
     path_planner = PathPlanner(map_filename, map_settings_filename, goal_point, stopping_dist)
     method = "rrt_star"
     if method == "rrt_star":
-        nodes = path_planner.rrt_star_planning(max_iters = 400)
+        nodes = path_planner.rrt_star_planning(max_iters = 1000)
     else:
         nodes = path_planner.rrt_planning()
     path = path_planner.recover_path()
@@ -675,7 +675,7 @@ def main():
     #print(path.shape)
     node_path_metric = np.hstack(np.array([n[0].point for n in path]))
 
-    plot_full = True
+    plot_full = False
 
     if plot_full:
         for (n1, n1_id), (n2, n2_id) in zip(path[:-1], path[1:]):
