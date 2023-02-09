@@ -435,7 +435,7 @@ class PathPlanner:
             traj = np.linspace(point_i, point_s, num = substeps) # (10, 3, 1)
         elif not np.isfinite(radius): # straight ahead or behind
             # check at sufficient resolution
-            substeps = np.ceil(d / self.robot_radius).astype(np.int)
+            substeps = np.ceil(d / self.robot_radius).astype(np.int) + 1
             traj = np.linspace(point_i, point_s, num = substeps) # (10, 3, 1)
         else:
             c_phi = 1 - ((d**2) / (2 * radius**2))
@@ -594,8 +594,8 @@ class PathPlanner:
                 new_traj = self.connect_node_to_point(self.nodes[id].point, arrived_to_pt)
                 if np.any(np.isnan(new_traj)):
                     continue
-                #assert np.all(new_traj[0] == self.nodes[id].point[:, 0]), f"{new_traj[0]}, {self.nodes[id].point}"
-                #assert np.all(new_traj[-1, :-1] == arrived_to_pt[:-1, 0]), f"{new_traj}, {arrived_to_pt}"
+                assert np.allclose(new_traj[0, :2], self.nodes[id].point[:2, 0]), f"{new_traj[0]}\n{self.nodes[id].point}"
+                assert np.allclose(new_traj[-1, :2], arrived_to_pt[:2, 0]), f"{new_traj[-1, :2]}\n{arrived_to_pt[:2, 0]}"
                 curr_ctc = self.cost_to_come(new_traj) + self.nodes[id].cost
                 if curr_ctc < best_ctc:
                     best_ctc = curr_ctc
@@ -617,8 +617,8 @@ class PathPlanner:
                 new_traj = self.connect_node_to_point(arrived_to_pt, self.nodes[id].point)
                 if np.isnan(new_traj).any():
                     continue
-                #assert np.all(new_traj[0] == arrived_to_pt[:, 0])
-                #assert np.all(new_traj[-1, :-1] == self.nodes[id].point[:-1, 0])
+                assert np.allclose(new_traj[0, :2], arrived_to_pt[:2, 0])
+                assert np.allclose(new_traj[-1, :-1], self.nodes[id].point[:-1, 0])
                 new_ctc = self.cost_to_come(new_traj) + self.nodes[-1].cost
                 if new_ctc < self.nodes[id].cost:
                     self.nodes[self.nodes[id].parent_id].children_ids.remove(id)
@@ -662,9 +662,8 @@ def main():
     #RRT precursor
     path_planner = PathPlanner(map_filename, map_settings_filename, goal_point, stopping_dist)
     method = "rrt_star"
-    # TODO: fix cycles in RRTstar
-    if method == "rrt":
-        nodes = path_planner.rrt_star_planning(max_iters = 1000)
+    if method == "rrt_star":
+        nodes = path_planner.rrt_star_planning(max_iters = 400)
     else:
         nodes = path_planner.rrt_planning()
     path = path_planner.recover_path()
@@ -673,7 +672,7 @@ def main():
     #print(path.shape)
     node_path_metric = np.hstack(np.array([n[0].point for n in path]))
 
-    plot_full = False
+    plot_full = True
 
     if plot_full:
         for (n1, n1_id), (n2, n2_id) in zip(path[:-1], path[1:]):
