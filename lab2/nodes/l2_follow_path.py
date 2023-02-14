@@ -31,7 +31,7 @@ OBS_DIST_MULT = .1  # multiplier to change the effect of low distance to obstacl
 MIN_TRANS_DIST_TO_USE_ROT = TRANS_GOAL_TOL  # m, robot has to be within this distance to use rot distance in cost
 #PATH_NAME = 'path_complete.npy'  # saved path from l2_planning.py, should be in the same directory as this file
 #PATH_NAME = 'shortest_path_rrt_star.npy'  # saved path from l2_planning.py, should be in the same directory as this file
-PATH_NAME = 'shortest_path_rrt_star_myhal.npy'  # saved path from l2_planning.py, should be in the same directory as this file
+PATH_NAME = 'shortest_path_rrt_star_willowgarageworld_05res.npy'  # saved path from l2_planning.py, should be in the same directory as this file
 
 # here are some hardcoded paths to use if you want to develop l2_planning and this file in parallel
 #TEMP_HARDCODE_PATH = [[2, 0, 0], [2.75, -1, -np.pi/2], [2.75, -4, -np.pi/2], [2, -4.4, np.pi]]  # almost collision-free
@@ -116,11 +116,11 @@ class PathFollower():
 
         rospy.on_shutdown(self.stop_robot_on_shutdown)
 
-        #map_filename = "willowgarageworld_05res.png"
-        #map_settings_filename = "willowgarageworld_05res.yaml"
-        map_filename = "myhal.png"
-        map_settings_filename = "myhal.yaml"
-        self.planner = PathPlanner(map_filename, map_settings_filename, self.path_tuples[-1, None].T[:2], 0.5)
+        map_filename = "willowgarageworld_05res.png"
+        map_settings_filename = "willowgarageworld_05res.yaml"
+        # map_filename = "myhal.png"
+        # map_settings_filename = "myhal.yaml"
+        self.planner = PathPlanner(map_filename, map_settings_filename, self.path_tuples[-1, None].T[:2], 0.5, False)
 
         self.prev_control = None
         self.prev_path = None
