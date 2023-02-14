@@ -502,9 +502,6 @@ class PathPlanner:
 
     #Planner Functions
     def rrt_planning(self):
-        #This function performs RRT on the given map and robot
-        #You do not need to demonstrate this function to the TAs, but it is left in for you to check your work
-        #for i in range(1): #Most likely need more iterations than this to complete the map!
         i = 0
         while True:
             #Sample map space
@@ -515,9 +512,6 @@ class PathPlanner:
 
             #Get the closest point
             closest_node_id = self.closest_node(point)[0]
-            #print(closest_node_id)
-            #print(f"Sampled point {point}")
-            #print(f"Closest point {self.nodes[closest_node_id].point}")
 
             #Simulate driving the robot towards the closest point
             trajectory_o = self.simulate_trajectory(self.nodes[closest_node_id].point, point, fix_col = True)
@@ -569,11 +563,9 @@ class PathPlanner:
             arrived_to_pt = trajectory_o[-1][:, None]  # (3, 1)
 
             if self.check_if_duplicate(arrived_to_pt):
-                #print("found duplicate")
                 continue
 
 
-            #print(f"Arrived to point: {arrived_to_pt}")
             self.window.add_point(arrived_to_pt[:-1, 0].copy())
             assert not self.is_colliding(arrived_to_pt[:-1])
             cost = self.cost_to_come(trajectory_o) + self.nodes[closest_node_id].cost
@@ -588,9 +580,6 @@ class PathPlanner:
             self.max_pt = np.maximum(self.max_pt, arrived_to_pt)
 
             #Last node rewire
-            #x = lambda node : np.linalg.norm(arrived_to_pt[:-1] - node.point[:-1])
-            #dist = np.array(list(map(x, self.nodes[:-1])))
-            #close_idx = np.where(dist < self.ball_radius())[0]
             kdtree = scipy.spatial.cKDTree(self.node_pts[:-1, :, 0])
             close_idx = kdtree.query_ball_point(arrived_to_pt[:2,0], r = self.ball_radius())
             best_ctc = np.inf
@@ -618,7 +607,6 @@ class PathPlanner:
 
 
             #Close node rewire
-            #print("TO DO: Near point rewiring")
             for id in close_idx:
                 new_traj = self.connect_node_to_point(arrived_to_pt, self.nodes[id].point)
                 if np.isnan(new_traj).any():
