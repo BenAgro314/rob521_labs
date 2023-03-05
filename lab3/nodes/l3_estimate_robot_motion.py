@@ -14,15 +14,39 @@ from turtlebot3_msgs.msg import SensorState
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Pose, Twist, TransformStamped, Transform, Quaternion
 from std_msgs.msg import Empty
+from tf.transformations import euler_from_quaternion, quaternion_from_euler
 
 from utils import convert_pose_to_tf, euler_from_ros_quat, ros_quat_from_euler
 
 
 ENC_TICKS = 4096
 RAD_PER_TICK = 0.001533981
-WHEEL_RADIUS = .066 / 2
-BASELINE = .287 / 2
+WHEEL_RADIUS = 0.0345 # .066 / 2 # replace with calibrated values
+BASELINE = .287 / 2 # replace with calibrated values
+INT32_MAX = 2**31
 
+R_MATRIX = np.array(
+    [
+        [WHEEL_RADIUS/2.0, WHEEL_RADIUS/2.0],
+        [WHEEL_RADIUS/(2.0 * BASELINE), -WHEEL_RADIUS/(2.0 * BASELINE)]
+    ]
+)
+
+def get_rotation(quat: Quaternion):
+    orientation_list = [quat.x, quat.y, quat.z, quat.w]
+    (_, _, yaw) = euler_from_quaternion(orientation_list)
+    return yaw
+
+def safe_del_phi(a, b):
+    #Need to check if the encoder storage variable has overflowed
+    diff = np.int64(b) - np.int64(a)
+    if diff < -np.int64(INT32_MAX): #Overflowed
+        delPhi = (INT32_MAX - 1 - a) + (INT32_MAX + b) + 1
+    elif diff > np.int64(INT32_MAX) - 1: #Underflowed
+        delPhi = (INT32_MAX + a) + (INT32_MAX - 1 - b) + 1
+    else:
+        delPhi = b - a  
+    return delPhi
 
 class WheelOdom:
     def __init__(self):
@@ -81,13 +105,37 @@ class WheelOdom:
             # Update your odom estimates with the latest encoder measurements and populate the relevant area
             # of self.pose and self.twist with estimated position, heading and velocity
 
-            # self.pose.position.x = xx
-            # self.pose.position.y = xx
-            # self.pose.orientation = xx
+            theta_bar = get_rotation(self.pose.orientation)
 
-            # self.twist.linear.x = mu_dot[0].item()
-            # self.twist.linear.y = mu_dot[1].item()
-            # self.twist.angular.z = mu_dot[2].item()
+            print(self.last_enc_r, re, re - self.last_enc_r)
+            dphi_r = 2 * np.pi * safe_del_phi(self.last_enc_r, re)  / ENC_TICKS
+            dphi_l = 2 * np.pi * safe_del_phi(self.last_enc_l, le)  / ENC_TICKS
+            self.last_enc_r = re
+            self.last_enc_l = le
+
+            dphi = np.array([[dphi_r], [dphi_l]])
+            transformation_matrix = np.array([
+                    [np.cos(theta_bar), 0],
+                    [np.sin(theta_bar), 0],
+                    [0, 1]
+                ]
+            )
+            mu_dot = transformation_matrix @ R_MATRIX @ dphi
+
+
+
+            self.pose.position.x = self.pose.position.x + mu_dot[0].item()
+            self.pose.position.y = self.pose.position.y + mu_dot[1].item()
+            new_theta = theta_bar + mu_dot[2].item()
+            quat_arr = quaternion_from_euler(0, 0, new_theta)
+            quat = Quaternion(x = quat_arr[0], y = quat_arr[1], z = quat_arr[2], w = quat_arr[3])
+            self.pose.orientation = quat
+
+            # do these need to be divided by delta t?
+            dt = (rospy.Time.now() - self.last_time).to_sec()
+            self.twist.linear.x = mu_dot[0].item() / dt
+            self.twist.linear.y = mu_dot[1].item() / dt
+            self.twist.angular.z = mu_dot[2].item() / dt
 
             # publish the updates as a topic and in the tf tree
             current_time = rospy.Time.now()
@@ -103,9 +151,9 @@ class WheelOdom:
             self.bag.write('odom_est', self.wheel_odom)
 
             # for testing against actual odom
-            # print("Wheel Odom: x: %2.3f, y: %2.3f, t: %2.3f" % (
-            #     self.pose.position.x, self.pose.position.y, mu[2].item()
-            # ))
+            print("Wheel Odom: x: %2.3f, y: %2.3f, t: %2.3f" % (
+                self.pose.position.x, self.pose.position.y, new_theta
+            ))
             # print("Turtlebot3 Odom: x: %2.3f, y: %2.3f, t: %2.3f" % (
             #     self.odom.pose.pose.position.x, self.odom.pose.pose.position.y,
             #     euler_from_ros_quat(self.odom.pose.pose.orientation)[2]
