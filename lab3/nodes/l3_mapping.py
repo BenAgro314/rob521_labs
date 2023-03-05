@@ -74,7 +74,7 @@ class OccupancyGripMap:
         self.map_odom_tf.header.stamp = rospy.Time.now()
         self.tf_br.sendTransform(self.map_odom_tf)
 
-    def scan_cb(self, scan_msg):
+    def scan_cb(self, scan_msg: LaserScan):
         # read new laser data and populate map
         # get current odometry robot pose
         try:
@@ -94,11 +94,21 @@ class OccupancyGripMap:
 
         # YOUR CODE HERE!!! Loop through each measurement in scan_msg to get the correct angle and
         # x_start and y_start to send to your ray_trace_update function.
+        ranges = scan_msg.ranges[::SCAN_DOWNSAMPLE]
+        for i, r in enumerate(ranges):
+            world_angle = odom_map[2] - i * scan_msg.angle_increment - scan_msg.angle_increment/2 # middle of scan range
+            self.ray_trace_update(self.np_map, self.log_odds, odom_map[0], odom_map[1], world_angle, r)
+
 
         # publish the message
         self.map_msg.info.map_load_time = rospy.Time.now()
         self.map_msg.data = self.np_map.flatten()
         self.map_pub.publish(self.map_msg)
+
+    def convert_xy_to_map_inds(self, xys):
+        # xys.shape == (N, 2)
+        return (x - self.map_msg.info.origin.x) // CELL_SIZE, (self.map_msg.info.origin.y) // CELL_SIZE
+
 
     def ray_trace_update(self, map, log_odds, x_start, y_start, angle, range_mes):
         """
@@ -115,6 +125,14 @@ class OccupancyGripMap:
         # YOUR CODE HERE!!! You should modify the log_odds object and the numpy map based on the outputs from
         # ray_trace and the equations from class. Your numpy map must be an array of int8s with 0 to 100 representing
         # probability of occupancy, and -1 representing unknown.
+
+        #inds = ray_trace()
+        x_end = x_start + range_mes * np.cos(angle) 
+        y_end = y_start + range_mes * np.cos(angle) 
+        xs = np.array([x_start, x_end])
+        ys = np.array([y_start, y_end])
+        inds = self.convert_xy_to_map_inds(xs, ys)
+        line(inds[0][0])
 
         return map, log_odds
 
