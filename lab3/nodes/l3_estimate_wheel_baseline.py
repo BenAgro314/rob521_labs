@@ -10,7 +10,7 @@ from geometry_msgs.msg import Twist
 INT32_MAX = 2**31
 NUM_ROTATIONS = 3 
 TICKS_PER_ROTATION = 4096
-WHEEL_RADIUS = 0.066 / 2 #In meters
+WHEEL_RADIUS = 0.0345 #0.066 / 2 #In meters
 
 
 class wheelBaselineEstimator():
@@ -35,7 +35,7 @@ class wheelBaselineEstimator():
         #Reset the robot 
         reset_msg = Empty()
         self.reset_pub.publish(reset_msg)
-        print('Ready to start wheel radius calibration!')
+        print('Ready to start wheel baseline calibration!')
         return
 
     def safeDelPhi(self, a, b):
@@ -77,8 +77,10 @@ class wheelBaselineEstimator():
             # # YOUR CODE HERE!!!
             # Calculate the radius of the wheel based on encoder measurements
 
-            # separation = ##
-            # print('Calibrated Separation: {} m'.format(separation))
+            sum_dphi = 2 * np.pi * ((self.del_left_encoder + self.del_right_encoder) / TICKS_PER_ROTATION)
+
+            separation = (WHEEL_RADIUS / 2.0) * (sum_dphi / (NUM_ROTATIONS * 2 * np.pi))
+            print('Calibrated Separation: {} m'.format(separation))
 
             #Reset the robot and calibration routine
             self.lock.acquire()

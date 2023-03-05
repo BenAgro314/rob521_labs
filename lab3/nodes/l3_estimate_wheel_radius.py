@@ -79,11 +79,10 @@ class wheelRadiusEstimator():
             # # YOUR CODE HERE!!!
             # Calculate the radius of the wheel based on encoder measurements
 
-            print(self.del_left_encoder + self.del_right_encoder)
             # get number of rotations from tick count
-            denom = 2 * np.pi * ((self.del_left_encoder + self.del_right_encoder) / TICKS_PER_ROTATION)
+            sum_dphi = 2 * np.pi * ((self.del_left_encoder + self.del_right_encoder) / TICKS_PER_ROTATION)
             # compute radius
-            radius = 2 * DRIVEN_DISTANCE / denom
+            radius = 2 * DRIVEN_DISTANCE / sum_dphi
             print('Calibrated Radius: {} m'.format(radius))
 
             #Reset the robot and calibration routine
