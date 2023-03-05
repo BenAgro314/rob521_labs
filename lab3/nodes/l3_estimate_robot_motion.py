@@ -53,7 +53,7 @@ class WheelOdom:
         # publishers, subscribers, tf broadcaster
         self.sensor_state_sub = rospy.Subscriber('/sensor_state', SensorState, self.sensor_state_cb, queue_size=1)
         self.odom_sub = rospy.Subscriber('/odom', Odometry, self.odom_cb, queue_size=1)
-        self.wheel_odom_pub = rospy.Publisher('/wheel_odom', Odometry, queue_size=1)
+        self.wheel_odom_pub = rospy.Publisher('/odom_est', Odometry, queue_size=1)
         self.tf_br = tf2_ros.TransformBroadcaster()
 
         # attributes
