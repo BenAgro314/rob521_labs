@@ -11,6 +11,8 @@ INT32_MAX = 2**31
 DRIVEN_DISTANCE = 0.75 #in meters
 TICKS_PER_ROTATION = 4096
 
+# ANSWER: wheel radius is 0.0345 m
+
 class wheelRadiusEstimator():
     def __init__(self):
         rospy.init_node('encoder_data', anonymous=True) # Initialize node
@@ -33,6 +35,7 @@ class wheelRadiusEstimator():
         #Reset the robot 
         reset_msg = Empty()
         self.reset_pub.publish(reset_msg)
+
         print('Ready to start wheel radius calibration!')
         return
 
@@ -76,8 +79,12 @@ class wheelRadiusEstimator():
             # # YOUR CODE HERE!!!
             # Calculate the radius of the wheel based on encoder measurements
 
-            # radius = ##
-            # print('Calibrated Radius: {} m'.format(radius))
+            print(self.del_left_encoder + self.del_right_encoder)
+            # get number of rotations from tick count
+            denom = 2 * np.pi * ((self.del_left_encoder + self.del_right_encoder) / TICKS_PER_ROTATION)
+            # compute radius
+            radius = 2 * DRIVEN_DISTANCE / denom
+            print('Calibrated Radius: {} m'.format(radius))
 
             #Reset the robot and calibration routine
             self.lock.acquire()
