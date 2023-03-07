@@ -22,7 +22,7 @@ BETA = 1
 MAP_DIM = (4, 4)
 CELL_SIZE = .01
 NUM_PTS_OBSTACLE = 3
-SCAN_DOWNSAMPLE = 1
+SCAN_DOWNSAMPLE = 10
 
 class OccupancyGripMap:
     def __init__(self):
@@ -74,7 +74,7 @@ class OccupancyGripMap:
         self.map_odom_tf.header.stamp = rospy.Time.now()
         self.tf_br.sendTransform(self.map_odom_tf)
 
-    def scan_cb(self, scan_msg: LaserScan):
+    def scan_cb(self, scan_msg):
         # read new laser data and populate map
         # get current odometry robot pose
         try:
@@ -94,21 +94,21 @@ class OccupancyGripMap:
 
         # YOUR CODE HERE!!! Loop through each measurement in scan_msg to get the correct angle and
         # x_start and y_start to send to your ray_trace_update function.
-        ranges = scan_msg.ranges[::SCAN_DOWNSAMPLE]
-        for i, r in enumerate(ranges):
-            world_angle = odom_map[2] - i * scan_msg.angle_increment - scan_msg.angle_increment/2 # middle of scan range
-            self.ray_trace_update(self.np_map, self.log_odds, odom_map[0], odom_map[1], world_angle, r)
 
+        ranges = scan_msg.ranges[::SCAN_DOWNSAMPLE]
+
+        #TODO get rid of for loop if possible
+        for i, r in enumerate(ranges):
+            if (scan_msg.range_min < r < scan_msg.range_max):
+                    #Lidar Spins counter clockwise
+                    world_angle = odom_map[2] + SCAN_DOWNSAMPLE * i * scan_msg.angle_increment
+                    self.np_map,self.log_odds = self.ray_trace_update(self.np_map, self.log_odds, odom_map[0], 
+                                                odom_map[1], world_angle, r)
 
         # publish the message
         self.map_msg.info.map_load_time = rospy.Time.now()
         self.map_msg.data = self.np_map.flatten()
         self.map_pub.publish(self.map_msg)
-
-    def convert_xy_to_map_inds(self, xys):
-        # xys.shape == (N, 2)
-        return (x - self.map_msg.info.origin.x) // CELL_SIZE, (self.map_msg.info.origin.y) // CELL_SIZE
-
 
     def ray_trace_update(self, map, log_odds, x_start, y_start, angle, range_mes):
         """
@@ -126,13 +126,63 @@ class OccupancyGripMap:
         # ray_trace and the equations from class. Your numpy map must be an array of int8s with 0 to 100 representing
         # probability of occupancy, and -1 representing unknown.
 
-        #inds = ray_trace()
-        x_end = x_start + range_mes * np.cos(angle) 
-        y_end = y_start + range_mes * np.cos(angle) 
-        xs = np.array([x_start, x_end])
-        ys = np.array([y_start, y_end])
-        inds = self.convert_xy_to_map_inds(xs, ys)
-        line(inds[0][0])
+        x_end = x_start + range_mes * np.cos(angle)
+        y_end = y_start + range_mes * np.sin(angle)
+
+        #NUM_PTS_OBSTACLE indicating how many **pixels** at the end of a lidar beam
+        extra_range_mes = NUM_PTS_OBSTACLE * CELL_SIZE + range_mes
+        x_end_extra = x_start + extra_range_mes * np.cos(angle)
+        y_end_extra = y_start + extra_range_mes * np.sin(angle)
+        
+        # Converting from coords to map index
+        x_end_extra = int(x_end_extra/CELL_SIZE)
+        y_end_extra = int(y_end_extra/CELL_SIZE)
+        x_end = int(x_end/CELL_SIZE)
+        y_end = int(y_end/CELL_SIZE)
+        x_start = int(x_start/CELL_SIZE)
+        y_start = int(y_start/CELL_SIZE)
+
+        # Grid bound
+        max_x,max_y = log_odds.shape
+
+        # Free space
+        rr, cc = ray_trace(y_start, x_start, y_end, x_end)
+
+        # Checking freespace bounds
+        rr1 = rr[rr>=0]
+        cc1 = cc[rr>=0]
+        cc = cc1[cc1>=0]
+        rr = rr1[cc1>=0]
+
+        rr1 = rr[rr<max_x]
+        cc1 = cc[rr<max_x]
+        cc = cc1[cc1<max_y]
+        rr = rr1[cc1<max_y]
+
+        ray = np.zeros(log_odds.shape)
+        ray[rr, cc] = -BETA
+
+        # Occupied space
+        rr, cc = ray_trace(y_end, x_end, y_end_extra, x_end_extra)
+
+        # Checking Occupied bounds
+        rr1 = rr[rr>=0]
+        cc1 = cc[rr>=0]
+        cc = cc1[cc1>=0]
+        rr = rr1[cc1>=0]
+
+        rr1 = rr[rr<max_x]
+        cc1 = cc[rr<max_x]
+        cc = cc1[cc1<max_y]
+        rr = rr1[cc1<max_y]
+
+        ray[rr, cc] = ALPHA
+
+        log_odds = log_odds + ray
+
+        # Updating map points only touched by god rays
+        temp_map = (self.log_odds_to_probability(log_odds)*100).astype(np.int8)
+        map[ray!=0] = temp_map[ray!=0]
 
         return map, log_odds
 
