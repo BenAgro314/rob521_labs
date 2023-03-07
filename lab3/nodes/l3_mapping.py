@@ -38,6 +38,7 @@ class OccupancyGripMap:
         # attributes
         width = int(MAP_DIM[0] / CELL_SIZE); height = int(MAP_DIM[1] / CELL_SIZE)
         self.log_odds = np.zeros((width, height))
+        self.prior = 0
         self.np_map = np.ones((width, height), dtype=np.uint8) * -1  # -1 for unknown
         self.map_msg = OccupancyGrid()
         self.map_msg.info = MapMetaData()
@@ -96,7 +97,7 @@ class OccupancyGripMap:
         # x_start and y_start to send to your ray_trace_update function.
         ranges = scan_msg.ranges[::SCAN_DOWNSAMPLE]
         for i, r in enumerate(ranges):
-            world_angle = odom_map[2] - i * scan_msg.angle_increment - scan_msg.angle_increment/2 # middle of scan range
+            world_angle = odom_map[2] + (i * scan_msg.angle_increment) - (scan_msg.angle_increment/2) # middle of scan range
             self.ray_trace_update(self.np_map, self.log_odds, odom_map[0], odom_map[1], world_angle, r)
 
 
@@ -105,9 +106,12 @@ class OccupancyGripMap:
         self.map_msg.data = self.np_map.flatten()
         self.map_pub.publish(self.map_msg)
 
-    def convert_xy_to_map_inds(self, xys):
-        # xys.shape == (N, 2)
-        return (x - self.map_msg.info.origin.x) // CELL_SIZE, (self.map_msg.info.origin.y) // CELL_SIZE
+    def convert_xy_to_map_inds(self, xs, ys):
+        # xs.shape (N)
+        # ys.shape (N)
+        col_inds = xs // CELL_SIZE # todo: remove hack
+        row_inds = ys // CELL_SIZE
+        return col_inds.astype(np.int32), row_inds.astype(np.int32)
 
 
     def ray_trace_update(self, map, log_odds, x_start, y_start, angle, range_mes):
@@ -127,14 +131,39 @@ class OccupancyGripMap:
         # probability of occupancy, and -1 representing unknown.
 
         #inds = ray_trace()
+        out_of_map = False
+        if np.isinf(range_mes):
+            range_mes = 1000 # big number out of map range
+            out_of_map = True
         x_end = x_start + range_mes * np.cos(angle) 
-        y_end = y_start + range_mes * np.cos(angle) 
+        y_end = y_start + range_mes * np.sin(angle) 
         xs = np.array([x_start, x_end])
         ys = np.array([y_start, y_end])
-        inds = self.convert_xy_to_map_inds(xs, ys)
-        line(inds[0][0])
+        col_inds, row_inds = self.convert_xy_to_map_inds(xs, ys) # (N), (N)
+        rr, cc = ray_trace(row_inds[0], col_inds[0], row_inds[1], col_inds[1])
+        invalid_mask = np.logical_or(np.logical_or(rr < 0, rr >= map.shape[0]),
+            np.logical_or(cc < 0, cc >= map.shape[1]))
+        rr = rr[~invalid_mask]
+        cc = cc[~invalid_mask]
+        seen = np.zeros_like(map)
+        seen[rr, cc] = 1.0
+        if out_of_map:
+            log_odds[rr, cc] -= BETA
+        else:
+            if len(rr) < NUM_PTS_OBSTACLE:
+                obstacle_mask = np.array([True] * len(rr)).astype(bool)
+            else:
+                obstacle_mask = np.array([False] * (len(rr) - NUM_PTS_OBSTACLE) + [True] * NUM_PTS_OBSTACLE).astype(bool)
+            obs_rr = rr[obstacle_mask]
+            obs_cc = cc[obstacle_mask]
+            non_obs_rr = rr[~obstacle_mask]
+            non_obs_cc = cc[~obstacle_mask]
+            log_odds[obs_rr, obs_cc] += ALPHA
+            log_odds[non_obs_cc, non_obs_rr] -= BETA
 
-        return map, log_odds
+        #print(log_odds.min(), log_odds.max())
+        map[np.logical_and(seen, log_odds > self.prior)] = 100.0
+        map[np.logical_and(seen, log_odds <= self.prior)] = 0.0
 
     def log_odds_to_probability(self, values):
         # print(values)
