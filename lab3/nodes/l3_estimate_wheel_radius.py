@@ -8,10 +8,11 @@ from std_msgs.msg import Empty
 from geometry_msgs.msg import Twist
 
 INT32_MAX = 2**31
-DRIVEN_DISTANCE = 0.75 #in meters
+DRIVEN_DISTANCE = 2.44 # m
 TICKS_PER_ROTATION = 4096
 
 # ANSWER: wheel radius is 0.0345 m
+# From lab, answer: 0.032104807719179417 m
 
 class wheelRadiusEstimator():
     def __init__(self):
