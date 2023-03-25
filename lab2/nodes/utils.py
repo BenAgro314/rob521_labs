@@ -18,6 +18,7 @@ def se2_pose_list_to_path(pose_list, ref_frame):
         ros_pose = PoseStamped()
         ros_pose.pose.position.x = pose[0]
         ros_pose.pose.position.y = pose[1]
+        ros_pose.pose.position.z = pose[2]
         ros_pose.pose.orientation = ros_quat_from_euler([0, 0, pose[2]])
         ros_pose.header.frame_id = ref_frame
         path.poses.append(ros_pose)
